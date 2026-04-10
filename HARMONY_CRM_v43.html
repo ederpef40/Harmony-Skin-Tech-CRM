@@ -2060,7 +2060,7 @@ function showView(name) {
   if (name==='mensajes') renderMessages();
   if (name==='ingresos') renderIngresos();
   if (name==='reportes') renderReportes();
-  if (name==='calendario') { if(typeof renderCalendar==='function') setTimeout(renderCalendar,50); }
+  if (name==='calendario') { calStaffFilter=null; if(typeof renderCalendar==='function') setTimeout(renderCalendar,50); }
 }
 
 // ─── DASHBOARD ───────────────────────────────────────────────────────
@@ -3127,6 +3127,23 @@ function savePatient() {
   if (!nombre || !apellido || !telefono) {
     showToast('Completa nombre, apellido y teléfono','⚠'); return;
   }
+  // Validar nombre duplicado (solo al crear, no al editar)
+  if(editingIdx === null) {
+    const nombreCompleto = (nombre + ' ' + apellido).toLowerCase().trim();
+    const duplicadoNombre = patients.find(p =>
+      (p.nombre + ' ' + p.apellido).toLowerCase().trim() === nombreCompleto
+    );
+    if(duplicadoNombre) {
+      showToast(`⚠ Paciente ya existe: ${duplicadoNombre.nombre} ${duplicadoNombre.apellido}`, '🚫');
+      document.getElementById('inp-nombre').style.borderColor = '#ff6b6b';
+      document.getElementById('inp-apellido').style.borderColor = '#ff6b6b';
+      setTimeout(()=>{
+        document.getElementById('inp-nombre').style.borderColor = '';
+        document.getElementById('inp-apellido').style.borderColor = '';
+      }, 3000);
+      return;
+    }
+  }
   // Validar teléfono duplicado
   const telLimpio = telefono.replace(/\D/g,'');
   const duplicado = patients.find(p => {
@@ -3186,8 +3203,11 @@ function viewPatient(idx) {
   var fg_bg = serviceColor(p.servicio);
   var fg = fg_bg.fg, bg = fg_bg.bg;
   var alertNeeded = isAlertNeeded(p);
-  var histCitas = calCitas.filter(function(c){ 
-    return String(c.pid)===String(p.id) || String(c.pid)===String(p._docId);
+  var pacNomCompleto = (p.nombre+' '+p.apellido).toLowerCase().trim();
+  var histCitas = calCitas.filter(function(c){
+    return String(c.pid)===String(p.id) ||
+           String(c.pid)===String(p._docId) ||
+           (c.pnom && c.pnom.toLowerCase().trim()===pacNomCompleto);
   });
   var citasRealizadas = histCitas.filter(function(c){ return c.estado==='realizada'; });
   var citasPendientes = histCitas.filter(function(c){ return c.estado==='agendada'; });
@@ -3905,7 +3925,7 @@ function saveCita(){
   var precio=getCOPValue('cita-precio');
   var abono=getCOPValue('cita-abono');
 
-  // Create new patient if needed
+  // Create new patient if needed — verificar que no exista ya
   var nuevoDiv=document.getElementById('cita-nuevo-pac');
   if(!pacId && nuevoDiv && nuevoDiv.style.display!=='none'){
     var nn=document.getElementById('np-nombre');
@@ -3913,13 +3933,23 @@ function saveCita(){
     var nt=document.getElementById('np-telefono');
     if(nn&&na&&nt&&nn.value.trim()&&na.value.trim()&&nt.value.trim()){
       var ne=document.getElementById('np-email');
-      var newPac={id:Date.now(),nombre:nn.value.trim(),apellido:na.value.trim(),telefono:nt.value.trim(),
-        email:ne?ne.value.trim():'',servicio:svc||'Pendiente',fecha:f,costo:precio,meses:6,
-        notas:'',notasHistorial:[],msgStatus:null};
-      savePatientFS(newPac);
-      pacId=String(newPac.id);
-      pacNom=newPac.nombre+' '+newPac.apellido;
-      showToast('✓ Paciente creado','✓');
+      var nnv=nn.value.trim(), nav=na.value.trim();
+      // Buscar si ya existe para evitar duplicados
+      var existente=patients.find(function(x){
+        return x.nombre.toLowerCase()===nnv.toLowerCase() && x.apellido.toLowerCase()===nav.toLowerCase();
+      });
+      if(existente){
+        pacId=String(existente._docId||existente.id);
+        pacNom=existente.nombre+' '+existente.apellido;
+      } else {
+        var newPac={id:Date.now(),nombre:nnv,apellido:nav,telefono:nt.value.trim(),
+          email:ne?ne.value.trim():'',servicio:svc||'Pendiente',fecha:f,costo:precio,meses:6,
+          notas:'',notasHistorial:[],msgStatus:null};
+        savePatientFS(newPac);
+        pacId=String(newPac.id);
+        pacNom=newPac.nombre+' '+newPac.apellido;
+        showToast('✓ Paciente creado','✓');
+      }
     }
   }
 
