@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Harmony Skin Tech — CRM Dra. Isabel Jiménez v42</title>
+<title>Harmony Skin Tech — CRM Dra. Isabel Jiménez v43</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -49,6 +49,10 @@
     top: 0; left: 0;
     z-index: 100;
     overflow: hidden;
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+    will-change: transform;
+    isolation: isolate;
   }
   .logo {
     padding: 0 24px 28px;
@@ -1699,14 +1703,14 @@ async function ejecutarLimpiezaCRM() {
 function initFirestoreListeners() {
   db.collection('patients').orderBy('nombre').onSnapshot(snap => {
     patients = snap.docs.map(d => ({...d.data(), _docId: d.id}));
-    // Seed demo solo una vez — verificar flag en Firestore (no localStorage, funciona en todos los navegadores)
-    if(patients.length === 0) {
+    // Seed demo SOLO para admins y SOLO si nunca se ha hecho antes
+    if(patients.length === 0 && isAdmin) {
       db.collection('_config').doc('app').get().then(doc => {
         if(!doc.exists || !doc.data().seeded) {
           db.collection('_config').doc('app').set({seeded: true}, {merge: true});
           seedDemoPatients();
         }
-      });
+      }).catch(e => console.warn('_config check:', e));
     }
     renderDashboard && renderDashboard();
     renderAlerts && renderAlerts();
@@ -1714,14 +1718,20 @@ function initFirestoreListeners() {
     renderMessages && renderMessages();
     renderIngresos && renderIngresos();
     checkRecordatorios && checkRecordatorios();
-  }, err => console.error('patients:', err));
+  }, err => {
+    console.error('patients listener:', err);
+    showToast('Error de conexión con la base de datos. Cierra sesión y vuelve a entrar.', '⚠');
+  });
 
   db.collection('citas').onSnapshot(snap => {
     calCitas = snap.docs.map(d => ({...d.data(), _docId: d.id}));
     renderCalendar && renderCalendar();
     renderDashboard && renderDashboard();
     renderIngresos && renderIngresos();
-  }, err => console.error('citas:', err));
+  }, err => {
+    console.error('citas listener:', err);
+    showToast('Error cargando citas. Cierra sesión y vuelve a entrar.', '⚠');
+  });
 
   db.collection('staff').onSnapshot(snap => {
     calStaff = snap.docs.map(d => ({...d.data(), _docId: d.id}));
@@ -1802,6 +1812,39 @@ function auditLog(accion, detalle) {
     ts: firebase.firestore.FieldValue.serverTimestamp()
   }).catch(()=>{});
 }
+
+// ─── RECUPERACIÓN DE PACIENTES PERDIDOS ──────────────────────────────
+async function recuperarPacientesPerdidos() {
+  if(!isAdmin) { showToast('Solo admins pueden ejecutar esto','🚫'); return; }
+  const perdidos = [
+    { nombre:'Lilliana', apellido:'Bedoya Castaño', telefono:'3135997071', servicio:'Postoperatorio Corporal', notas:'Procedimiento: LIPOSUCCION+ CORRECION DE CICATRIZ+ INYECCION DE GRASA EN GLUTEOS Y SENOS' },
+    { nombre:'Sirela Domethilia', apellido:'Kwieman', telefono:'+59995184419', servicio:'Postoperatorio Corporal', notas:'Procedimiento: LIPOSUCCION+ ABDOMINOPLASTIA+ HERNIA' },
+    { nombre:'Kelly', apellido:'Rueda', telefono:'3016797520', servicio:'Postoperatorio Corporal', notas:'Procedimiento: CAMBIO DE IMPLANTES+ LIPOSUCCION + INYECCION DE GRASA EN GLUTEOS' },
+    { nombre:'Ismeris Maria', apellido:'Ruz Arregoces', telefono:'+59995150959', servicio:'Postoperatorio Corporal', notas:'Procedimiento: CIRUGIA CORPORAL RETIRO DE IMPLANTES+ LIPOSUCCION' },
+    { nombre:'Yesid', apellido:'Osorio Rojas', telefono:'3003250575', servicio:'Hidratación Básica', notas:'Hidratación Post Laser' },
+    { nombre:'Isabel', apellido:'Jiménez', telefono:'3015409346', servicio:'Postoperatorio Corporal', notas:'' }
+  ];
+  let creados = 0;
+  for(const p of perdidos) {
+    const yaExiste = patients.some(x =>
+      x.nombre.toLowerCase() === p.nombre.toLowerCase() &&
+      x.apellido.toLowerCase() === p.apellido.toLowerCase()
+    );
+    if(!yaExiste) {
+      await db.collection('patients').add({
+        id: Date.now() + Math.random(),
+        nombre: p.nombre, apellido: p.apellido,
+        telefono: p.telefono, email: '', servicio: p.servicio,
+        fecha: new Date().toISOString().split('T')[0],
+        costo: 0, meses: 6, notas: p.notas,
+        notasHistorial: [], msgStatus: null
+      });
+      creados++;
+    }
+  }
+  showToast(`Recuperación completada: ${creados} pacientes restaurados`, '✅');
+}
+window.recuperarPacientesPerdidos = recuperarPacientesPerdidos;
 
 function seedDemoPatients() {
   const now = new Date();
