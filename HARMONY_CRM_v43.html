@@ -1499,33 +1499,36 @@ function loginSubmit() {
     });
 }
 
+let _tokenInterval = null;
+
 auth.onAuthStateChanged(user => {
   if (user) {
     currentUser = user;
     isAdmin = ADMINS.includes(user.email);
     document.getElementById('login-overlay').style.display = 'none';
-    // Mostrar info usuario en sidebar
     const userEl = document.getElementById('sidebar-user');
     if(userEl) userEl.innerHTML = `<div style="font-size:11px;color:var(--gold);font-weight:600">${isAdmin?'👑 Admin':'👤 Usuario'}</div><div style="font-size:12px;color:var(--text);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${user.email}</div>`;
-    // Mini label colapsable
     const miniRole = document.getElementById('sidebar-user-mini');
     const miniEmail = document.getElementById('sidebar-email-mini');
     if(miniRole) miniRole.textContent = isAdmin ? '👑' : '👤';
     if(miniEmail) miniEmail.textContent = user.email.split('@')[0];
-    // Ocultar exportar para no-admins
     document.querySelectorAll('.admin-only').forEach(el => el.style.display = isAdmin ? '' : 'none');
     // Forzar renovación del token antes de iniciar listeners
-    user.getIdToken(true).then(() => {
-      initFirestoreListeners();
-    }).catch(() => {
-      initFirestoreListeners(); // Iniciar de todas formas
-    });
-    // Auto-renovar token cada 50 minutos (expira cada 60)
-    setInterval(() => {
+    user.getIdToken(true)
+      .then(() => initFirestoreListeners())
+      .catch(() => initFirestoreListeners());
+    // Auto-renovar token cada 50 min — UN SOLO intervalo, siempre
+    if(_tokenInterval) clearInterval(_tokenInterval);
+    _tokenInterval = setInterval(() => {
       if(auth.currentUser) auth.currentUser.getIdToken(true).catch(()=>{});
     }, 50 * 60 * 1000);
   } else {
     currentUser = null;
+    // Cancelar intervalo de token
+    if(_tokenInterval) { clearInterval(_tokenInterval); _tokenInterval = null; }
+    // Cancelar todos los listeners de Firestore
+    _firestoreUnsubs.forEach(fn => { try { fn(); } catch(e){} });
+    _firestoreUnsubs = [];
     document.getElementById('login-overlay').style.display = 'flex';
   }
 });
@@ -1552,7 +1555,12 @@ window.addEventListener('online', () => {
   }
 });
 
-function logout() { auth.signOut(); }
+function logout() {
+  _firestoreUnsubs.forEach(fn => { try { fn(); } catch(e){} });
+  _firestoreUnsubs = [];
+  if(_tokenInterval) { clearInterval(_tokenInterval); _tokenInterval = null; }
+  auth.signOut();
+}
 
 // ─── BLOQUEOS DE AGENDA ──────────────────────────────────────────────
 function getBloqueo(staffId, fecha, hora) {
@@ -1756,6 +1764,10 @@ async function reconectarFirebase() {
 }
 
 function initFirestoreListeners() {
+  // Cancelar listeners anteriores antes de crear nuevos — evita duplicados
+  _firestoreUnsubs.forEach(fn => { try { fn(); } catch(e){} });
+  _firestoreUnsubs = [];
+
   function onError(coleccion) {
     return function(err) {
       console.error(coleccion + ' listener:', err);
@@ -2132,8 +2144,9 @@ function formatDate(str) {
 
 // ─── NAVIGATION ───────────────────────────────────────────────────────
 function showView(name) {
-  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  // Mostrar primero la nueva vista, luego ocultar las demás — evita flash blanco
   document.getElementById('view-'+name).classList.add('active');
+  document.querySelectorAll('.view').forEach(v => { if(v.id !== 'view-'+name) v.classList.remove('active'); });
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const nav = document.querySelector(`.nav-item[onclick="showView('${name}')"]`);
   if (nav) nav.classList.add('active');
