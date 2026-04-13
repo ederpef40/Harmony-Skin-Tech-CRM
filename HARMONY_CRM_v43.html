@@ -499,6 +499,12 @@
       <span class="icon">📊</span> Reportes
     </a>
   </div>
+  <!-- BANNER CONEXIÓN FIREBASE -->
+  <div id="conn-banner" style="display:none;margin:0 12px 8px;background:rgba(255,107,107,0.12);border:1px solid rgba(255,107,107,0.35);border-radius:10px;padding:10px 12px;">
+    <div style="font-size:11px;font-weight:700;color:#ff6b6b;margin-bottom:6px">⚠ Sin conexión a la base de datos</div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:8px">Los datos no se están cargando correctamente.</div>
+    <button onclick="reconectarFirebase()" style="width:100%;background:#ff6b6b;color:#fff;border:none;border-radius:8px;padding:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">🔄 Reconectar ahora</button>
+  </div>
   <div class="sidebar-bottom">
     <!-- PANEL COLAPSABLE -->
     <div id="sidebar-panel-toggle" onclick="toggleSidebarPanel()" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:10px;cursor:pointer;margin-bottom:8px;border:1px solid var(--border);transition:background 0.2s" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'">
@@ -1508,10 +1514,41 @@ auth.onAuthStateChanged(user => {
     if(miniEmail) miniEmail.textContent = user.email.split('@')[0];
     // Ocultar exportar para no-admins
     document.querySelectorAll('.admin-only').forEach(el => el.style.display = isAdmin ? '' : 'none');
-    initFirestoreListeners();
+    // Forzar renovación del token antes de iniciar listeners
+    user.getIdToken(true).then(() => {
+      initFirestoreListeners();
+    }).catch(() => {
+      initFirestoreListeners(); // Iniciar de todas formas
+    });
+    // Auto-renovar token cada 50 minutos (expira cada 60)
+    setInterval(() => {
+      if(auth.currentUser) auth.currentUser.getIdToken(true).catch(()=>{});
+    }, 50 * 60 * 1000);
   } else {
     currentUser = null;
     document.getElementById('login-overlay').style.display = 'flex';
+  }
+});
+
+// ─── RECONEXIÓN AUTOMÁTICA ────────────────────────────────────────────
+// Cuando la pestaña vuelve al frente (asesora cambia de tab o desbloquea pantalla)
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible' && auth.currentUser) {
+    auth.currentUser.getIdToken(true)
+      .then(() => {
+        // Verificar que los listeners siguen vivos con una lectura rápida
+        db.collection('patients').limit(1).get()
+          .then(() => mostrarBannerConexion(false))
+          .catch(() => reconectarFirebase());
+      })
+      .catch(() => reconectarFirebase());
+  }
+});
+
+// Cuando vuelve el internet después de un corte
+window.addEventListener('online', () => {
+  if(auth.currentUser) {
+    setTimeout(() => reconectarFirebase(), 2000);
   }
 });
 
@@ -1700,68 +1737,114 @@ async function ejecutarLimpiezaCRM() {
 }
 
 // ─── FIRESTORE LISTENERS ─────────────────────────────────────────────
+let _firestoreUnsubs = [];
+function mostrarBannerConexion(mostrar) {
+  const b = document.getElementById('conn-banner');
+  if(b) b.style.display = mostrar ? 'block' : 'none';
+}
+
+async function reconectarFirebase() {
+  mostrarBannerConexion(false);
+  try {
+    if(auth.currentUser) await auth.currentUser.getIdToken(true);
+  } catch(e) { /* ignorar */ }
+  // Cancelar listeners anteriores
+  _firestoreUnsubs.forEach(fn => { try { fn(); } catch(e){} });
+  _firestoreUnsubs = [];
+  initFirestoreListeners();
+  showToast('Reconectando...', '🔄');
+}
+
 function initFirestoreListeners() {
-  db.collection('patients').orderBy('nombre').onSnapshot(snap => {
-    patients = snap.docs.map(d => ({...d.data(), _docId: d.id}));
-    // Seed demo SOLO para admins y SOLO si nunca se ha hecho antes
-    if(patients.length === 0 && isAdmin) {
-      db.collection('_config').doc('app').get().then(doc => {
-        if(!doc.exists || !doc.data().seeded) {
-          db.collection('_config').doc('app').set({seeded: true}, {merge: true});
-          seedDemoPatients();
-        }
-      }).catch(e => console.warn('_config check:', e));
-    }
-    renderDashboard && renderDashboard();
-    renderAlerts && renderAlerts();
-    renderPatients && renderPatients();
-    renderMessages && renderMessages();
-    renderIngresos && renderIngresos();
-    checkRecordatorios && checkRecordatorios();
-  }, err => {
-    console.error('patients listener:', err);
-    showToast('Error de conexión con la base de datos. Cierra sesión y vuelve a entrar.', '⚠');
-  });
+  function onError(coleccion) {
+    return function(err) {
+      console.error(coleccion + ' listener:', err);
+      mostrarBannerConexion(true);
+    };
+  }
 
-  db.collection('citas').onSnapshot(snap => {
-    calCitas = snap.docs.map(d => ({...d.data(), _docId: d.id}));
-    renderCalendar && renderCalendar();
-    renderDashboard && renderDashboard();
-    renderIngresos && renderIngresos();
-  }, err => {
-    console.error('citas listener:', err);
-    showToast('Error cargando citas. Cierra sesión y vuelve a entrar.', '⚠');
-  });
+  _firestoreUnsubs.push(
+    db.collection('patients').orderBy('nombre').onSnapshot(snap => {
+      mostrarBannerConexion(false);
+      patients = snap.docs.map(d => ({...d.data(), _docId: d.id}));
+      if(patients.length === 0 && isAdmin) {
+        db.collection('_config').doc('app').get().then(doc => {
+          if(!doc.exists || !doc.data().seeded) {
+            db.collection('_config').doc('app').set({seeded: true}, {merge: true});
+            seedDemoPatients();
+          }
+        }).catch(e => console.warn('_config check:', e));
+      }
+      renderDashboard && renderDashboard();
+      renderAlerts && renderAlerts();
+      renderPatients && renderPatients();
+      renderMessages && renderMessages();
+      renderIngresos && renderIngresos();
+      checkRecordatorios && checkRecordatorios();
+    }, onError('patients'))
+  );
 
-  db.collection('staff').onSnapshot(snap => {
-    calStaff = snap.docs.map(d => ({...d.data(), _docId: d.id}));
-    renderCalendar && renderCalendar();
-  }, err => console.error('staff:', err));
+  _firestoreUnsubs.push(
+    db.collection('citas').onSnapshot(snap => {
+      calCitas = snap.docs.map(d => ({...d.data(), _docId: d.id}));
+      renderCalendar && renderCalendar();
+      renderDashboard && renderDashboard();
+      renderIngresos && renderIngresos();
+    }, onError('citas'))
+  );
 
-  db.collection('bloqueos').onSnapshot(snap => {
-    calBloqueos = snap.docs.map(d => ({...d.data(), _docId: d.id}));
-    renderCalendar && renderCalendar();
-  }, err => console.error('bloqueos:', err));
+  _firestoreUnsubs.push(
+    db.collection('staff').onSnapshot(snap => {
+      calStaff = snap.docs.map(d => ({...d.data(), _docId: d.id}));
+      renderCalendar && renderCalendar();
+    }, onError('staff'))
+  );
+
+  _firestoreUnsubs.push(
+    db.collection('bloqueos').onSnapshot(snap => {
+      calBloqueos = snap.docs.map(d => ({...d.data(), _docId: d.id}));
+      renderCalendar && renderCalendar();
+    }, onError('bloqueos'))
+  );
 }
 
 // ─── FIRESTORE SAVE HELPERS ──────────────────────────────────────────
+// Reintento automático: si falla por token, renueva y reintenta una vez
+async function fsConReintento(operacion) {
+  try {
+    return await operacion();
+  } catch(e) {
+    if(e.code === 'permission-denied' || e.code === 'unauthenticated' || (e.message && e.message.includes('permission'))) {
+      try {
+        if(auth.currentUser) await auth.currentUser.getIdToken(true);
+        return await operacion();
+      } catch(e2) {
+        mostrarBannerConexion(true);
+        showToast('Sin conexión. Toca "Reconectar" en el menú.', '⚠');
+        throw e2;
+      }
+    }
+    throw e;
+  }
+}
+
 async function savePatientFS(rec) {
   const data = {...rec};
   try {
-    if (data._docId) {
-      await db.collection('patients').doc(data._docId).set(data);
-    } else {
-      await db.collection('patients').add(data);
-    }
+    await fsConReintento(() =>
+      data._docId
+        ? db.collection('patients').doc(data._docId).set(data)
+        : db.collection('patients').add(data)
+    );
     auditLog('Paciente guardado', (data.nombre||'') + ' ' + (data.apellido||''));
-  } catch(e) { showToast('Error: ' + e.message, '⚠'); }
+  } catch(e) { showToast('Error guardando paciente: ' + e.message, '⚠'); }
 }
 
 async function deletePatientFS(rec) {
   if (!isAdmin) { showToast('No tienes permiso para eliminar', '🚫'); return false; }
   if (!rec._docId) return false;
   try {
-    await db.collection('patients').doc(rec._docId).delete();
+    await fsConReintento(() => db.collection('patients').doc(rec._docId).delete());
     auditLog('Paciente eliminado', (rec.nombre||'') + ' ' + (rec.apellido||''));
     return true;
   } catch(e) { showToast('Error: ' + e.message, '⚠'); return false; }
@@ -1770,11 +1853,11 @@ async function deletePatientFS(rec) {
 async function saveCitaFS(cita) {
   const data = {...cita};
   try {
-    if (data._docId) {
-      await db.collection('citas').doc(data._docId).set(data);
-    } else {
-      await db.collection('citas').add(data);
-    }
+    await fsConReintento(() =>
+      data._docId
+        ? db.collection('citas').doc(data._docId).set(data)
+        : db.collection('citas').add(data)
+    );
     auditLog('Cita guardada', (data.pnom||'') + ' ' + (data.fecha||'') + ' ' + (data.hi||''));
   } catch(e) { showToast('Error guardando cita: ' + e.message, '⚠'); }
 }
