@@ -1533,26 +1533,38 @@ auth.onAuthStateChanged(user => {
   }
 });
 
-// ─── RECONEXIÓN AUTOMÁTICA ────────────────────────────────────────────
-// Cuando la pestaña vuelve al frente (asesora cambia de tab o desbloquea pantalla)
+// ─── RECONEXIÓN AUTOMÁTICA (silenciosa) ──────────────────────────────
+// Solo reconecta si hay un problema real — sin notificaciones innecesarias
+async function reconectarSilencioso() {
+  if(!auth.currentUser) return;
+  try {
+    await auth.currentUser.getIdToken(false); // Sin forzar si el token está vigente
+    await db.collection('patients').limit(1).get();
+    mostrarBannerConexion(false); // Ocultar banner si estaba visible
+  } catch(e) {
+    // Solo si realmente hay un problema, reconectar silenciosamente
+    try {
+      if(auth.currentUser) await auth.currentUser.getIdToken(true);
+      _firestoreUnsubs.forEach(fn => { try { fn(); } catch(e){} });
+      _firestoreUnsubs = [];
+      initFirestoreListeners();
+      mostrarBannerConexion(false);
+    } catch(e2) {
+      mostrarBannerConexion(true); // Solo mostrar banner si falla todo
+    }
+  }
+}
+
+// Cuando la pestaña vuelve al frente
 document.addEventListener('visibilitychange', () => {
   if(document.visibilityState === 'visible' && auth.currentUser) {
-    auth.currentUser.getIdToken(true)
-      .then(() => {
-        // Verificar que los listeners siguen vivos con una lectura rápida
-        db.collection('patients').limit(1).get()
-          .then(() => mostrarBannerConexion(false))
-          .catch(() => reconectarFirebase());
-      })
-      .catch(() => reconectarFirebase());
+    reconectarSilencioso();
   }
 });
 
 // Cuando vuelve el internet después de un corte
 window.addEventListener('online', () => {
-  if(auth.currentUser) {
-    setTimeout(() => reconectarFirebase(), 2000);
-  }
+  if(auth.currentUser) setTimeout(() => reconectarSilencioso(), 2000);
 });
 
 function logout() {
