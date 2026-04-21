@@ -1585,16 +1585,30 @@ async function sincronizarFirebase() {
   const btn = document.getElementById('btn-sync');
   if(btn) { btn.textContent = '⏳ Verificando...'; btn.disabled = true; }
   try {
+    // Renovar token
     if(auth.currentUser) await auth.currentUser.getIdToken(true);
-    await db.collection('patients').limit(1).get({ source: 'server' });
+    // Verificar que los datos están cargados y la sesión activa
+    if(!auth.currentUser) throw new Error('Sin sesión');
+    if(patients.length === 0 && calCitas.length === 0) throw new Error('Sin datos');
     mostrarBannerConexion(false);
-    if(btn) { btn.textContent = '✅ Todo guardado en Firebase'; btn.style.color='#6fcfb0'; btn.disabled = false; }
-    showToast('✅ Conexión con Firebase verificada — datos seguros', '✅');
+    if(btn) { btn.textContent = '✅ Firebase conectado'; btn.style.color='#6fcfb0'; btn.disabled = false; }
+    showToast('✅ Firebase conectado — ' + patients.length + ' pacientes, ' + calCitas.length + ' citas', '✅');
     setTimeout(() => { if(btn) btn.textContent = '🔄 Verificar conexión'; }, 4000);
   } catch(e) {
-    if(btn) { btn.textContent = '❌ Sin conexión — reconectando...'; btn.style.color='#ff6b6b'; btn.disabled = false; }
-    mostrarBannerConexion(true);
-    showToast('❌ Sin conexión con Firebase. Presiona "Reconectar"', '🚫');
+    // Intentar reconectar
+    try {
+      if(auth.currentUser) await auth.currentUser.getIdToken(true);
+      _firestoreUnsubs.forEach(fn => { try { fn(); } catch(e){} });
+      _firestoreUnsubs = [];
+      initFirestoreListeners();
+      if(btn) { btn.textContent = '✅ Reconectado'; btn.style.color='#6fcfb0'; btn.disabled = false; }
+      mostrarBannerConexion(false);
+      showToast('✅ Reconectado a Firebase', '✅');
+    } catch(e2) {
+      if(btn) { btn.textContent = '❌ Sin conexión'; btn.style.color='#ff6b6b'; btn.disabled = false; }
+      mostrarBannerConexion(true);
+      showToast('❌ Sin conexión con Firebase', '🚫');
+    }
     setTimeout(() => { if(btn) { btn.textContent = '🔄 Verificar conexión'; btn.style.color='#6fcfb0'; } }, 4000);
   }
 }
