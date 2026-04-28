@@ -819,6 +819,7 @@
         <button onclick="setCitaEstado('realizada',this)" class="btn btn-sm" style="background:rgba(111,207,176,0.1);color:var(--muted);border:1px solid var(--border)" id="est-realizada">🟢 Realizada</button>
         <button onclick="setCitaEstado('cancelada',this)" class="btn btn-sm" style="background:rgba(255,107,107,0.1);color:var(--muted);border:1px solid var(--border)" id="est-cancelada">🔴 Cancelada</button>
         <button onclick="setCitaEstado('reagendada',this)" class="btn btn-sm" style="background:rgba(122,184,224,0.1);color:var(--muted);border:1px solid var(--border)" id="est-reagendada">🔵 Reagendada</button>
+        <button onclick="setCitaEstado('no_vino',this)" class="btn btn-sm" style="background:rgba(255,107,107,0.1);color:var(--muted);border:1px solid var(--border)" id="est-no_vino">🚫 No vino</button>
         <input type="hidden" id="cita-estado" value="agendada">
       </div>
 
@@ -3425,7 +3426,8 @@ function viewPatient(idx) {
           var abonoFmt = c.abono>0 ? ' · Abonó $'+Number(c.abono).toLocaleString('es-CO') : '';
           var isCancelada = c.estado==='cancelada';
           var isReagendada = c.estado==='reagendada';
-          return '<div '+clickAction+' style="background:var(--surface2);border-radius:12px;padding:12px;margin-bottom:8px;border:1px solid var(--border);'+hoverBorder+(isCancelada?'border-left:3px solid var(--alert);':isReagendada?'border-left:3px solid var(--sky);':'')+'cursor:'+cursor+';opacity:'+(isReal?0.85:1)+'">'
+          var isNoVino = c.estado==='no_vino';
+          return '<div '+clickAction+' style="background:var(--surface2);border-radius:12px;padding:12px;margin-bottom:8px;border:1px solid var(--border);'+hoverBorder+(isCancelada||isNoVino?'border-left:3px solid '+(isNoVino?'#888':'var(--alert)')+';':isReagendada?'border-left:3px solid var(--sky);':'')+'cursor:'+cursor+';opacity:'+(isReal||isNoVino?0.65:1)+(isNoVino?';filter:grayscale(0.5)':'')+'">'
             +'<div style="display:flex;justify-content:space-between;margin-bottom:6px">'
             +'<div style="font-size:13px;font-weight:600">'+(c.svc||'Sin servicio')+'</div>'
             +'<span style="font-size:11px;background:'+eColor+'22;color:'+eColor+';border-radius:20px;padding:2px 10px">'+eLabel+'</span></div>'
@@ -3757,14 +3759,13 @@ function setCitaEstado(estado, btn) {
     if(!confirm(`¿Confirmar que la cita fue REALIZADA?\n\nPaciente: ${pacNom}\nServicio: ${svc}\n\n⚠ Esta acción bloqueará la cita y no podrá editarse.`)) return;
   }
   document.getElementById('cita-estado').value = estado;
-  const colors = { agendada:'#ffa94d', realizada:'#6fcfb0', cancelada:'#ff6b6b', reagendada:'#7ab8e0' };
-  const icons = { agendada:'🟡', realizada:'🟢', cancelada:'🔴', reagendada:'🔵' };
-  ['agendada','realizada','cancelada','reagendada'].forEach(e => {
+  const colors = { agendada:'#ffa94d', realizada:'#6fcfb0', cancelada:'#ff6b6b', reagendada:'#7ab8e0', no_vino:'#ff6b6b' };
+  ['agendada','realizada','cancelada','reagendada','no_vino'].forEach(e => {
     const b = document.getElementById('est-'+e);
     if(b) { b.style.color='var(--muted)'; b.style.borderColor='var(--border)'; b.style.background='rgba(255,255,255,0.03)'; }
   });
   const active = document.getElementById('est-'+estado);
-  if(active){ active.style.color=colors[estado]; active.style.borderColor=colors[estado]+'88'; active.style.background=colors[estado]+'22'; }
+  if(active){ active.style.color=colors[estado]||'#ffa94d'; active.style.borderColor=(colors[estado]||'#ffa94d')+'88'; active.style.background=(colors[estado]||'#ffa94d')+'22'; }
 }
 
 function renderCalendar(){
@@ -3825,12 +3826,13 @@ function renderCalendar(){
           <div style="position:absolute;right:4px;top:50%;transform:translateY(-50%);font-size:9px;color:${s.color};opacity:0.5">●</div>
         </div>`;
       }
-      return`<div onclick="openNewCita('${ds}','${t}','${s.id}')" style="border-right:1px solid var(--border);padding:3px;cursor:pointer;min-height:${dsh?36:52}px;overflow:hidden;min-width:0;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">${cits.map(c=>{const idx=calCitas.indexOf(c);const p=patients.find(x=>String(x.id)===String(c.pid));const nm=p?p.nombre+' '+p.apellido:(c.pnom||'Paciente');const icon=estadoIcon[c.estado||'agendada']||'🟡';const canceled=c.estado==='cancelada';const isBlocked = c.estado==='realizada'||c.estado==='cancelada';
-const cardBg = c.estado==='realizada'?'rgba(111,207,176,0.1)':canceled?'rgba(255,107,107,0.08)':s.color+'22';
-const cardBorder = c.estado==='realizada'?'#6fcfb0':canceled?'#ff6b6b':s.color;
-const blockIcon = c.estado==='realizada'?'🔒':canceled?'🚫':'';
+      return`<div onclick="openNewCita('${ds}','${t}','${s.id}')" style="border-right:1px solid var(--border);padding:3px;cursor:pointer;min-height:${dsh?36:52}px;overflow:hidden;min-width:0;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">${cits.map(c=>{const idx=calCitas.indexOf(c);const p=patients.find(x=>String(x.id)===String(c.pid));const nm=p?p.nombre+' '+p.apellido:(c.pnom||'Paciente');const icon=estadoIcon[c.estado||'agendada']||'🟡';const canceled=c.estado==='cancelada'||c.estado==='no_vino';const isBlocked = c.estado==='realizada'||c.estado==='cancelada'||c.estado==='no_vino';
+const cardBg = c.estado==='realizada'?'rgba(111,207,176,0.1)':c.estado==='no_vino'?'rgba(150,150,150,0.08)':canceled?'rgba(255,107,107,0.08)':s.color+'22';
+const cardBorder = c.estado==='realizada'?'#6fcfb0':c.estado==='no_vino'?'#888':canceled?'#ff6b6b':s.color;
+const blockIcon = c.estado==='realizada'?'🔒':c.estado==='no_vino'?'🚫':canceled?'🚫':'';
 var esVal=c.tipo==='valoracion';
-return`<div onclick="event.stopPropagation();${isBlocked?`showToast('${c.estado==='realizada'?'Cita completada — solo lectura':'Cita cancelada — solo lectura'}','${c.estado==='realizada'?'🔒':'🚫'}')`:`openEditCita(${idx})`}" style="background:${cardBg};border-left:3px solid ${cardBorder};border-radius:6px;padding:5px 8px;margin-bottom:3px;cursor:${isBlocked?'default':'pointer'};opacity:${isBlocked?0.65:1};${isBlocked?'filter:saturate(0.7)':''};" title="${isBlocked?c.estado==='realizada'?'Cita completada':'Cita cancelada':'Editar cita'}"><div style="font-size:10px;font-weight:600;color:${cardBorder}">${icon} ${c.hi}${c.hf?' → '+c.hf:''} ${blockIcon}</div><div style="font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;font-weight:500">${nm}</div>${c.svc?`<div style="font-size:10px;color:var(--muted)">${c.svc.substring(0,28)}</div>`:''}${c.precio?`<div style="font-size:10px;color:var(--gold)">$${Number(c.precio).toLocaleString('es-CO')}</div>`:''}</div>`;}).join('')}</div>`;
+const blockedMsg=c.estado==='realizada'?'Cita completada — solo lectura':c.estado==='no_vino'?'🚫 No vino — solo lectura':'Cita cancelada — solo lectura';
+return`<div onclick="event.stopPropagation();${isBlocked?`showToast('${blockedMsg}','🔒')`:`openEditCita(${idx})`}" style="background:${cardBg};border-left:3px solid ${cardBorder};border-radius:6px;padding:5px 8px;margin-bottom:3px;cursor:${isBlocked?'default':'pointer'};opacity:${isBlocked?0.65:1};${isBlocked?'filter:saturate(0.7)':''};" title="${blockedMsg}"><div style="font-size:10px;font-weight:600;color:${cardBorder}">${icon} ${c.hi}${c.hf?' → '+c.hf:''} ${blockIcon}</div><div style="font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;font-weight:500;${c.estado==='no_vino'?'text-decoration:line-through;opacity:0.6':''}">${nm}</div>${c.svc?`<div style="font-size:10px;color:var(--muted)">${c.svc.substring(0,28)}</div>`:''}${c.precio&&c.estado!=='no_vino'?`<div style="font-size:10px;color:var(--gold)">$${Number(c.precio).toLocaleString('es-CO')}</div>`:''}</div>`;}).join('')}</div>`;
     }).join('')}</div>`;
   }}
   const bod=document.getElementById('cal-body');if(bod)bod.innerHTML=html;
@@ -3881,7 +3883,7 @@ function renderWeekCalendar(){
     return`<div style="padding:10px 6px;text-align:center;border-right:1px solid var(--border);${isToday?'background:rgba(232,201,122,0.08)':''}"><div style="font-size:11px;color:${isToday?'var(--gold)':'var(--muted)'};font-weight:${isToday?'700':'400'}">${dayNames[i]}</div><div style="font-size:18px;font-weight:700;color:${isToday?'var(--gold)':'var(--text)'}">${new Date(ds+'T12:00:00').getDate()}</div>${cnt>0?`<div style="font-size:10px;color:var(--muted)">${cnt} cita${cnt>1?'s':''}</div>`:'<div style="font-size:10px;color:var(--border)">—</div>'}</div>`;
   }).join('');
 
-  const estadoColor={agendada:'#ffa94d',realizada:'#6fcfb0',cancelada:'#ff6b6b',reagendada:'#7ab8e0'};
+  const estadoColor={agendada:'#ffa94d',realizada:'#6fcfb0',cancelada:'#ff6b6b',reagendada:'#7ab8e0',no_vino:'#888888'};
 
   // ── HEADER oculto: el thead va dentro del mismo scroll-wrap para alinear columnas ──
   hdr.style.cssText='display:none;';
@@ -3932,9 +3934,10 @@ function renderWeekCalendar(){
             const shortNm=nm.length>18?nm.substring(0,16)+'…':nm;
             const staffW=getAllStaff().find(s=>s.id===c.staffId);
             const color=staffW?staffW.color:estadoColor[c.estado||'agendada'];
-            const isBlockedW=c.estado==='realizada'||c.estado==='cancelada'||c.estado==='reagendada';
+            const isBlockedW=c.estado==='realizada'||c.estado==='cancelada'||c.estado==='reagendada'||c.estado==='no_vino';
             const tipText=nm+' | '+c.hi+(c.hf?' -> '+c.hf:'')+' | '+(c.svc||'Sin servicio');
-            return`<div onclick="event.stopPropagation();${isBlockedW?`showToast('${c.estado==='realizada'?'🔒 Completada':c.estado==='cancelada'?'🚫 Cancelada':'🔵 Reagendada'}','🔒')`:`openEditCita(${idx})`}" 
+            const wMsg=c.estado==='realizada'?'🔒 Completada':c.estado==='cancelada'?'🚫 Cancelada':c.estado==='no_vino'?'🚫 No vino':'🔵 Reagendada';
+            return`<div onclick="event.stopPropagation();${isBlockedW?`showToast('${wMsg}','🔒')`:`openEditCita(${idx})`}" 
               onmouseenter="showCalTip(event,this)" onmouseleave="hideCalTip()"
               data-tip="${tipText.replace(/"/g,"'")}"
               style="background:${color}22;border-left:2px solid ${color};border-radius:4px;padding:2px 5px;margin-bottom:2px;cursor:${isBlockedW?'default':'pointer'};font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:${isBlockedW?0.6:1};${isBlockedW?'filter:saturate(0.5)':''}">
@@ -3996,8 +3999,8 @@ function openNewCita(f,t,sid){
 
 function openEditCita(idx){
   var c=calCitas[idx];
-  if(c.estado==='realizada'||c.estado==='cancelada'||c.estado==='reagendada'){
-    const msgs={realizada:'🔒 Cita completada — solo lectura',cancelada:'🚫 Cita cancelada — solo lectura',reagendada:'🔵 Cita reagendada — solo lectura'};
+  if(c.estado==='realizada'||c.estado==='cancelada'||c.estado==='reagendada'||c.estado==='no_vino'){
+    const msgs={realizada:'🔒 Cita completada — solo lectura',cancelada:'🚫 Cita cancelada — solo lectura',reagendada:'🔵 Cita reagendada — solo lectura',no_vino:'🚫 Paciente no vino — solo lectura'};
     showToast(msgs[c.estado]||'Solo lectura','🔒');
     return;
   }
@@ -4516,6 +4519,25 @@ function addQuickNote(idx) {
   viewPatient(idx);
 }
 
+// ─── MARCAR NO VINO ──────────────────────────────────────────────────
+async function marcarNoVino(docId) {
+  if(!confirm('¿Marcar esta cita como "No vino"?\n\nSe excluirá de ingresos y saldo pendiente.\nQueda guardada en el historial de la paciente.')) return;
+  const idx = calCitas.findIndex(c => c._docId === docId);
+  if(idx === -1) { showToast('❌ Cita no encontrada', '🚫'); return; }
+  const estadoAnterior = calCitas[idx].estado;
+  calCitas[idx].estado = 'no_vino';
+  try {
+    await fsConReintento(() => db.collection('citas').doc(docId).update({ estado: 'no_vino' }));
+    showToast('🚫 Cita marcada como No vino — excluida de ingresos', '🚫');
+    renderIngresos && renderIngresos();
+    renderDashboard && renderDashboard();
+    renderCalendar && renderCalendar();
+  } catch(e) {
+    calCitas[idx].estado = estadoAnterior;
+    showToast('❌ Error al actualizar: ' + e.message, '🚫');
+  }
+}
+
 // Register abono — usa modal elegante en lugar de prompt()
 let _abonoCitaIdx = null, _abonoPacIdx = null;
 
@@ -4951,10 +4973,11 @@ function renderAbonoTable() {
         <div style="font-size:10px;color:var(--muted);margin-top:2px">${pct}% pagado</div>
       </td>
       <td style="font-weight:700;white-space:nowrap;color:${saldo>0?'var(--warn)':'var(--mint)'}">${saldo>0?formatCOP(saldo):'—'}</td>
-      <td>
+      <td style="white-space:nowrap">
         <span style="font-size:11px;padding:4px 10px;border-radius:6px;font-weight:600;white-space:nowrap;background:${pagado?'rgba(111,207,176,0.15)':'rgba(255,169,77,0.15)'};color:${pagado?'var(--mint)':'var(--warn)'}">
           ${pagado?'✓ Pagado':'⏳ Pendiente'}
         </span>
+        ${!pagado && c._docId ? `<button onclick="marcarNoVino('${c._docId}')" title="Paciente no vino — excluir de ingresos" style="margin-left:6px;background:rgba(255,107,107,0.12);color:#ff6b6b;border:1px solid rgba(255,107,107,0.3);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">🚫 No vino</button>` : ''}
       </td>
     </tr>`;
   }).join('');
