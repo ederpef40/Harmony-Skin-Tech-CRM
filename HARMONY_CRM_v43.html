@@ -556,6 +556,16 @@
           </div>
         </div>
       </div>
+      <!-- ELIMINAR DEMOS -->
+      <div style="margin-top:8px" class="admin-only" id="btn-del-demos-wrap">
+        <button onclick="limpiarPacientesDemo()" style="width:100%;background:rgba(255,169,77,0.08);color:var(--warn);border:1px solid rgba(255,169,77,0.2);border-radius:10px;padding:10px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:8px">
+          <span style="font-size:16px">🧹</span>
+          <div style="text-align:left;flex:1">
+            <div>Eliminar pacientes demo</div>
+            <div style="font-size:10px;color:var(--muted);font-weight:400">Borra los 10 pacientes de prueba</div>
+          </div>
+        </button>
+      </div>
       <!-- LIMPIAR CRM -->
       <div style="margin-top:8px" class="admin-only">
         <button onclick="openLimpiarCRM()" style="width:100%;background:rgba(255,107,107,0.08);color:var(--alert);border:1px solid rgba(255,107,107,0.2);border-radius:10px;padding:10px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:8px">
@@ -1833,13 +1843,12 @@ function initFirestoreListeners() {
     db.collection('patients').orderBy('nombre').onSnapshot(snap => {
       mostrarBannerConexion(false);
       patients = snap.docs.map(d => ({...d.data(), _docId: d.id}));
-      if(patients.length === 0 && isAdmin) {
-        db.collection('_config').doc('app').get().then(doc => {
-          if(!doc.exists || !doc.data().seeded) {
-            db.collection('_config').doc('app').set({seeded: true}, {merge: true});
-            seedDemoPatients();
-          }
-        }).catch(e => console.warn('_config check:', e));
+      // Seed desactivado — clínica ya tiene pacientes reales
+      // Mostrar/ocultar botón de limpieza según si hay demos
+      const wrap = document.getElementById('btn-del-demos-wrap');
+      if(wrap) {
+        const hayDemos = patients.some(p => DEMO_TELEFONOS.includes((p.telefono||'').trim()));
+        wrap.style.display = hayDemos ? '' : 'none';
       }
       renderDashboard && renderDashboard();
       renderAlerts && renderAlerts();
@@ -1996,6 +2005,36 @@ async function recuperarPacientesPerdidos() {
   showToast(`Recuperación completada: ${creados} pacientes restaurados`, '✅');
 }
 window.recuperarPacientesPerdidos = recuperarPacientesPerdidos;
+
+// ─── LIMPIEZA PACIENTES DEMO ─────────────────────────────────────────
+const DEMO_TELEFONOS = [
+  '+57 310 1234567','+57 315 9876543','+57 320 5551234','+57 314 4445555',
+  '+57 317 8887776','+57 311 2223334','+57 316 6667778','+57 312 3334445',
+  '+57 318 1112223','+57 319 4445556'
+];
+async function limpiarPacientesDemo() {
+  const demos = patients.filter(p => DEMO_TELEFONOS.includes((p.telefono||'').trim()));
+  if(demos.length === 0) {
+    // Ocultar botón si no hay demos
+    const wrap = document.getElementById('btn-del-demos-wrap');
+    if(wrap) wrap.style.display = 'none';
+    showToast('✅ No hay pacientes demo en la base de datos', '✅');
+    return;
+  }
+  if(!confirm(`¿Eliminar ${demos.length} paciente(s) demo?\n\n${demos.map(p=>p.nombre+' '+p.apellido).join('\n')}\n\n⚠ Esta acción no se puede deshacer.`)) return;
+  try {
+    const batch = db.batch();
+    demos.forEach(p => {
+      if(p._docId) batch.delete(db.collection('patients').doc(p._docId));
+    });
+    await batch.commit();
+    showToast(`✅ ${demos.length} pacientes demo eliminados`, '🧹');
+    const wrap = document.getElementById('btn-del-demos-wrap');
+    if(wrap) wrap.style.display = 'none';
+  } catch(e) {
+    showToast('❌ Error al eliminar: ' + e.message, '🚫');
+  }
+}
 
 function seedDemoPatients() {
   const now = new Date();
