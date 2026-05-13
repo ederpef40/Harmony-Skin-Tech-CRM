@@ -495,6 +495,9 @@
     <a class="nav-item" onclick="showView('ingresos')">
       <span class="icon">◇</span> Ingresos
     </a>
+    <a class="nav-item" id="nav-caja" onclick="showView('caja')">
+      <span class="icon">💵</span> Caja
+    </a>
     <a class="nav-item" onclick="showView('reportes')">
       <span class="icon">📊</span> Reportes
     </a>
@@ -1102,6 +1105,92 @@
     </div>
   </div>
 
+  <!-- VIEW: CAJA -->
+  <div id="view-caja" class="view">
+    <div class="topbar">
+      <div>
+        <div class="page-title">Caja <span>Diaria</span></div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px">Ingresos, egresos y cierre del día</div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <input type="date" id="caja-fecha" onchange="renderCaja()" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:8px 14px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+        <button onclick="openEgresoModal()" style="background:rgba(255,107,107,0.12);color:var(--alert);border:1px solid rgba(255,107,107,0.3);border-radius:10px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">+ Egreso</button>
+        <button onclick="enviarCierreCaja()" style="background:var(--gold);color:var(--bg);border:none;border-radius:10px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">💬 Enviar cierre</button>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px" id="caja-kpis"></div>
+
+    <!-- Medios de pago -->
+    <div class="card" style="margin-bottom:20px;padding:20px" id="caja-medios-wrap">
+      <div style="font-size:14px;font-weight:600;margin-bottom:14px">💳 Medios de pago</div>
+      <div id="caja-medios"></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <!-- Ingresos -->
+      <div class="card" style="padding:20px">
+        <div style="font-size:14px;font-weight:600;margin-bottom:14px;color:var(--mint)">💰 Ingresos del día</div>
+        <div id="caja-ingresos-lista"></div>
+      </div>
+      <!-- Egresos -->
+      <div class="card" style="padding:20px">
+        <div style="font-size:14px;font-weight:600;margin-bottom:14px;color:var(--alert)">📤 Egresos del día</div>
+        <div id="caja-egresos-lista"></div>
+      </div>
+    </div>
+
+    <!-- Por profesional -->
+    <div class="card" style="margin-top:20px;padding:20px">
+      <div style="font-size:14px;font-weight:600;margin-bottom:14px">👩‍⚕️ Por profesional</div>
+      <div id="caja-profesionales"></div>
+    </div>
+  </div>
+
+  <!-- MODAL: EGRESO -->
+  <div class="modal-overlay" id="modal-egreso">
+    <div class="modal" style="width:440px">
+      <div class="modal-title">
+        <span>📤 Registrar Egreso</span>
+        <span class="modal-close" onclick="closeModal('modal-egreso')">✕</span>
+      </div>
+      <div class="form-group" style="margin-bottom:16px">
+        <label>Concepto *</label>
+        <input type="text" id="egreso-concepto" placeholder="Ej: Guantes, domicilio, papelería..." style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+      </div>
+      <div class="form-group" style="margin-bottom:16px">
+        <label>Categoría</label>
+        <select id="egreso-categoria" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+          <option value="insumos">🧴 Insumos / Materiales</option>
+          <option value="domicilio">🛵 Domicilio / Envío</option>
+          <option value="servicios">🔧 Servicios externos</option>
+          <option value="alimentacion">🍽 Alimentación</option>
+          <option value="otro">📦 Otro</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:16px">
+        <label>Monto (COP) *</label>
+        <input type="text" id="egreso-monto-display" placeholder="$0" oninput="fmtEgresoMonto(this)"
+          style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--gold);font-size:15px;font-weight:600;font-family:'DM Sans',sans-serif;outline:none">
+        <input type="hidden" id="egreso-monto-raw" value="0">
+      </div>
+      <div class="form-group" style="margin-bottom:20px">
+        <label>Medio de pago</label>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button onclick="selEgresoMetodo('efectivo',this)" id="egm-efectivo" class="btn btn-sm" style="background:rgba(111,207,176,0.2);color:var(--mint);border:1px solid var(--mint)">💵 Efectivo</button>
+          <button onclick="selEgresoMetodo('transferencia',this)" id="egm-transferencia" class="btn btn-sm" style="background:rgba(255,255,255,0.03);color:var(--muted);border:1px solid var(--border)">🏦 Transferencia</button>
+          <button onclick="selEgresoMetodo('tarjeta',this)" id="egm-tarjeta" class="btn btn-sm" style="background:rgba(255,255,255,0.03);color:var(--muted);border:1px solid var(--border)">💳 Tarjeta</button>
+        </div>
+        <input type="hidden" id="egreso-metodo" value="efectivo">
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-outline" onclick="closeModal('modal-egreso')" style="flex:1">Cancelar</button>
+        <button onclick="guardarEgreso()" style="flex:2;background:var(--alert);color:white;border:none;border-radius:10px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">Registrar egreso</button>
+      </div>
+    </div>
+  </div>
+
   <!-- VIEW: REPORTES -->
   <div id="view-reportes" class="view">
     <div class="topbar">
@@ -1427,6 +1516,15 @@
       </div>
     </div>
     <div id="abono-saldo-preview" style="font-size:13px;min-height:18px;margin-bottom:16px"></div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label>Medio de pago</label>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button onclick="selAbonoMetodo('efectivo',this)" id="abm-efectivo" class="btn btn-sm" style="background:rgba(111,207,176,0.2);color:var(--mint);border:1px solid var(--mint)">💵 Efectivo</button>
+        <button onclick="selAbonoMetodo('transferencia',this)" id="abm-transferencia" class="btn btn-sm" style="background:rgba(255,255,255,0.03);color:var(--muted);border:1px solid var(--border)">🏦 Transferencia</button>
+        <button onclick="selAbonoMetodo('tarjeta',this)" id="abm-tarjeta" class="btn btn-sm" style="background:rgba(255,255,255,0.03);color:var(--muted);border:1px solid var(--border)">💳 Tarjeta</button>
+      </div>
+      <input type="hidden" id="abono-metodo" value="efectivo">
+    </div>
     <div class="form-actions">
       <button class="btn btn-outline" onclick="closeModal('modal-abono')">Cancelar</button>
       <button class="btn btn-primary" onclick="confirmarAbono()">💰 Guardar abono</button>
@@ -1881,6 +1979,15 @@ function initFirestoreListeners() {
       renderCalendar && renderCalendar();
     }, onError('bloqueos'))
   );
+
+  _firestoreUnsubs.push(
+    db.collection('egresos').onSnapshot(snap => {
+      calEgresos = snap.docs.map(d => ({...d.data(), _docId: d.id}));
+      // Actualizar caja si está visible
+      const cajaView = document.getElementById('view-caja');
+      if(cajaView && cajaView.classList.contains('active')) renderCaja();
+    }, onError('egresos'))
+  );
 }
 
 // ─── FIRESTORE SAVE HELPERS ──────────────────────────────────────────
@@ -2005,6 +2112,32 @@ async function recuperarPacientesPerdidos() {
   showToast(`Recuperación completada: ${creados} pacientes restaurados`, '✅');
 }
 window.recuperarPacientesPerdidos = recuperarPacientesPerdidos;
+
+// ─── PAGOS CON FECHA (contabilidad de caja) ──────────────────────────
+// Retorna el array de pagos de una cita con compatibilidad hacia atrás:
+// citas antiguas sin pagos[] → trata el abono acumulado como un solo pago en c.fecha
+function getPagos(c) {
+  if(c.pagos && c.pagos.length > 0) return c.pagos;
+  if((c.abono||0) > 0) return [{monto: c.abono, fecha: c.fecha, usuario: 'Sistema'}];
+  return [];
+}
+// Suma de pagos de un array de citas recibidos en un mes/año específico
+function pagosSumaEnMes(citas, mes, anio) {
+  return citas
+    .flatMap(c => getPagos(c))
+    .filter(p => {
+      const pd = new Date((p.fecha||'')+'T12:00:00');
+      return pd.getMonth()+1 === mes && pd.getFullYear() === anio;
+    })
+    .reduce((s,p) => s+(p.monto||0), 0);
+}
+// Suma de pagos recibidos en una fecha específica (YYYY-MM-DD)
+function pagosSumaEnFecha(citas, fechaStr) {
+  return citas
+    .flatMap(c => getPagos(c))
+    .filter(p => p.fecha === fechaStr)
+    .reduce((s,p) => s+(p.monto||0), 0);
+}
 
 // ─── LIMPIEZA PACIENTES DEMO ─────────────────────────────────────────
 const DEMO_TELEFONOS = [
@@ -2250,6 +2383,7 @@ function showView(name) {
   if (name==='pacientes') renderPatients();
   if (name==='mensajes') renderMessages();
   if (name==='ingresos') renderIngresos();
+  if (name==='caja') { initCajaFecha(); renderCaja(); }
   if (name==='reportes') renderReportes();
   if (name==='calendario') { calStaffFilter=null; if(typeof renderCalendar==='function') setTimeout(renderCalendar,50); }
 }
@@ -2427,10 +2561,8 @@ function renderRevenueChart() {
     monthLabels.push(MESES_SHORT[d.getMonth()]);
     const m = d.getMonth() + 1;
     const y = d.getFullYear();
-    const total = calCitas
-      .filter(c => c.estado === 'realizada' && c.fecha) 
-      .filter(c => { const cd = new Date(c.fecha); return cd.getMonth()+1===m && cd.getFullYear()===y; })
-      .reduce((s,c) => s+(c.precio||0), 0);
+    // Suma pagos realmente recibidos en este mes (contabilidad de caja)
+    const total = pagosSumaEnMes(calCitas.filter(c => c.estado === 'realizada'), m, y);
     monthData.push(total);
   }
 
@@ -2983,10 +3115,10 @@ function setMsgStatus(idx, val) {
 
 // ─── INGRESOS ────────────────────────────────────────────────────────
 function renderIngresos() {
-  // FIX 7: Use REAL data from calCitas (realized citas only)
   const realized = calCitas.filter(c=>c.estado==='realizada');
-  const total = realized.reduce((s,c)=>s+(c.precio||0),0);
-  const totalAbonado = realized.reduce((s,c)=>s+(c.abono||0),0);
+  // Total cobrado real = suma de pagos realmente recibidos (contabilidad de caja)
+  const total = realized.reduce((s,c)=>s+getPagos(c).reduce((a,p)=>a+(p.monto||0),0),0);
+  const totalAbonado = total; // son equivalentes — pagos = abono acumulado
   const totalPendiente = realized.reduce((s,c)=>s+Math.max(0,(c.precio||0)-(c.abono||0)),0);
 
   // Average per patient (unique patients)
@@ -3817,7 +3949,7 @@ function renderCalendar(){
   const todayCitas=calCitas.filter(c=>c.fecha===ds);
   const realizadas=todayCitas.filter(c=>c.estado==='realizada');
   const pendientes=todayCitas.filter(c=>c.estado==='agendada'||!c.estado);
-  const ingDia=realizadas.reduce((s,c)=>s+(c.precio||0),0);
+  const ingDia=pagosSumaEnFecha(calCitas.filter(c=>c.estado==='realizada'), ds);
   const se=document.getElementById('stat-citas-hoy');if(se)se.textContent=todayCitas.length;
   const sr=document.getElementById('stat-realizadas');if(sr)sr.textContent=realizadas.length;
   const sp=document.getElementById('stat-pendientes');if(sp)sp.textContent=pendientes.length;
@@ -3906,7 +4038,7 @@ function renderWeekCalendar(){
   const weekCitas=calCitas.filter(c=>weekDays.includes(c.fecha));
   const realizadas=weekCitas.filter(c=>c.estado==='realizada');
   const pendientes=weekCitas.filter(c=>c.estado==='agendada'||!c.estado);
-  const ingSem=realizadas.reduce((s,c)=>s+(c.precio||0),0);
+  const ingSem=weekDays.reduce((s,d)=>s+pagosSumaEnFecha(calCitas.filter(c=>c.estado==='realizada'),d),0);
   const se=document.getElementById('stat-citas-hoy');if(se)se.textContent=weekCitas.length;
   const sr=document.getElementById('stat-realizadas');if(sr)sr.textContent=realizadas.length;
   const sp=document.getElementById('stat-pendientes');if(sp)sp.textContent=pendientes.length;
@@ -4639,12 +4771,20 @@ function confirmarAbono() {
   }
 
   calCitas[_abonoCitaIdx].abono = totalNuevo;
+  // Guardar pago con fecha y medio de pago para contabilidad exacta
+  if(!calCitas[_abonoCitaIdx].pagos) calCitas[_abonoCitaIdx].pagos = [];
+  calCitas[_abonoCitaIdx].pagos.push({
+    monto: valor,
+    fecha: toLocalDateStr(new Date()),
+    metodo: document.getElementById('abono-metodo')?.value || 'efectivo',
+    usuario: currentUser ? currentUser.email.split('@')[0] : 'Recepción'
+  });
   var p = patients[_abonoPacIdx];
   if(!p.notasHistorial) p.notasHistorial = [];
   p.notasHistorial.push({
-    texto: '💰 Abono registrado: $' + valor.toLocaleString('es-CO') + ' para ' + (c.svc||'servicio') + '. Total abonado: $' + totalNuevo.toLocaleString('es-CO') + '. Saldo: $' + Math.max(0, precio - totalNuevo).toLocaleString('es-CO'),
+    texto: '💰 Pago recibido: $' + valor.toLocaleString('es-CO') + ' para ' + (c.svc||'servicio') + '. Total cobrado: $' + totalNuevo.toLocaleString('es-CO') + '. Saldo: $' + Math.max(0, precio - totalNuevo).toLocaleString('es-CO'),
     fecha: new Date().toISOString(),
-    usuario: 'Recepción'
+    usuario: currentUser ? currentUser.email : 'Recepción'
   });
   saveCitaFS(calCitas[_abonoCitaIdx]);
   savePatientFS(p);
@@ -5048,6 +5188,243 @@ function setRepMesActual() {
   document.getElementById('rep-mes').value = now.getMonth() + 1;
   document.getElementById('rep-anio').value = now.getFullYear();
   renderReportes();
+}
+
+// ═══════════════════════════════════════════════════════════
+// MÓDULO: CAJA DIARIA
+// ═══════════════════════════════════════════════════════════
+let calEgresos = [];
+
+// Listener Firestore para egresos (se agrega en initFirestoreListeners)
+// Ver sección FIRESTORE LISTENERS
+
+const METODO_ICON = { efectivo:'💵', transferencia:'🏦', tarjeta:'💳' };
+const METODO_COLOR = { efectivo:'var(--mint)', transferencia:'var(--sky)', tarjeta:'var(--purple)' };
+const EGRESO_CAT_ICON = { insumos:'🧴', domicilio:'🛵', servicios:'🔧', alimentacion:'🍽', otro:'📦' };
+
+function initCajaFecha() {
+  const el = document.getElementById('caja-fecha');
+  if(el && !el.value) el.value = toLocalDateStr(new Date());
+}
+
+function renderCaja() {
+  initCajaFecha();
+  const fecha = document.getElementById('caja-fecha')?.value || toLocalDateStr(new Date());
+  const realized = calCitas.filter(c => c.estado === 'realizada');
+
+  // Pagos recibidos en esta fecha
+  const pagosHoy = realized.flatMap(c =>
+    getPagos(c).filter(p => p.fecha === fecha).map(p => ({...p, cita: c}))
+  );
+
+  // Egresos de esta fecha
+  const egresosHoy = calEgresos.filter(e => e.fecha === fecha);
+
+  const totalIngresos = pagosHoy.reduce((s,p) => s+(p.monto||0), 0);
+  const totalEgresos  = egresosHoy.reduce((s,e) => s+(e.monto||0), 0);
+  const neto = totalIngresos - totalEgresos;
+
+  // ── KPIs ──
+  document.getElementById('caja-kpis').innerHTML = `
+    <div class="kpi-card" style="padding:20px;border-left:3px solid var(--mint)">
+      <div class="kpi-label">💰 Ingresos del día</div>
+      <div class="kpi-value" style="color:var(--mint);font-size:26px">${formatCOP(totalIngresos)}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">${pagosHoy.length} pago${pagosHoy.length!==1?'s':''}</div>
+    </div>
+    <div class="kpi-card" style="padding:20px;border-left:3px solid var(--alert)">
+      <div class="kpi-label">📤 Egresos del día</div>
+      <div class="kpi-value" style="color:var(--alert);font-size:26px">${formatCOP(totalEgresos)}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">${egresosHoy.length} egreso${egresosHoy.length!==1?'s':''}</div>
+    </div>
+    <div class="kpi-card" style="padding:20px;border-left:3px solid ${neto>=0?'var(--gold)':'var(--alert)'}">
+      <div class="kpi-label">✅ Neto del día</div>
+      <div class="kpi-value" style="color:${neto>=0?'var(--gold)':'var(--alert)'};font-size:26px">${formatCOP(neto)}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">${neto>=0?'Cierre positivo':'⚠ Revisar egresos'}</div>
+    </div>`;
+
+  // ── Medios de pago ──
+  const porMetodo = {};
+  pagosHoy.forEach(p => { const m=p.metodo||'efectivo'; porMetodo[m]=(porMetodo[m]||0)+(p.monto||0); });
+  document.getElementById('caja-medios').innerHTML = totalIngresos===0
+    ? '<div style="color:var(--muted);font-size:13px;padding:8px 0">Sin ingresos registrados</div>'
+    : Object.entries(porMetodo).map(([m,v]) => {
+        const pct = Math.round((v/totalIngresos)*100);
+        return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+          <div style="width:110px;font-size:13px;font-weight:600;color:${METODO_COLOR[m]||'var(--text)'}">${METODO_ICON[m]||'💵'} ${m.charAt(0).toUpperCase()+m.slice(1)}</div>
+          <div style="flex:1;background:var(--surface2);border-radius:4px;height:8px">
+            <div style="width:${pct}%;height:100%;background:${METODO_COLOR[m]||'var(--mint)'};border-radius:4px;transition:width 0.4s"></div>
+          </div>
+          <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap">${formatCOP(v)}</div>
+          <div style="font-size:11px;color:var(--muted);width:32px;text-align:right">${pct}%</div>
+        </div>`;
+      }).join('');
+
+  // ── Lista ingresos ──
+  document.getElementById('caja-ingresos-lista').innerHTML = pagosHoy.length===0
+    ? '<div style="color:var(--muted);font-size:13px;font-style:italic;padding:12px 0">Sin ingresos en esta fecha</div>'
+    : pagosHoy.map(p => {
+        const pac = patients.find(x => String(x.id)===String(p.cita.pid));
+        const nom = pac ? pac.nombre+' '+pac.apellido : (p.cita.pnom||'Paciente');
+        return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nom}</div>
+            <div style="font-size:11px;color:var(--muted)">${(p.cita.svc||'').substring(0,30)}</div>
+          </div>
+          <div style="font-size:12px;color:${METODO_COLOR[p.metodo||'efectivo']}">${METODO_ICON[p.metodo||'efectivo']}</div>
+          <div style="font-size:14px;font-weight:700;color:var(--mint);white-space:nowrap">${formatCOP(p.monto)}</div>
+        </div>`;
+      }).join('');
+
+  // ── Lista egresos ──
+  document.getElementById('caja-egresos-lista').innerHTML = egresosHoy.length===0
+    ? '<div style="color:var(--muted);font-size:13px;font-style:italic;padding:12px 0">Sin egresos en esta fecha</div>'
+    : egresosHoy.map(e => `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:18px">${EGRESO_CAT_ICON[e.categoria]||'📦'}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600">${e.concepto}</div>
+            <div style="font-size:11px;color:var(--muted)">${e.usuario||''}${e.metodo?' · '+(METODO_ICON[e.metodo]||'')+'  '+e.metodo:''}</div>
+          </div>
+          ${isAdmin?`<button onclick="eliminarEgreso('${e._docId}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:4px" title="Eliminar">✕</button>`:''}
+          <div style="font-size:14px;font-weight:700;color:var(--alert);white-space:nowrap">-${formatCOP(e.monto)}</div>
+        </div>`).join('');
+
+  // ── Por profesional ──
+  const porProf = {};
+  pagosHoy.forEach(p => {
+    const stf = getAllStaff().find(s => s.id===p.cita.staffId);
+    const nom = stf ? stf.nombre : 'Sin asignar';
+    if(!porProf[nom]) porProf[nom]={total:0,count:0};
+    porProf[nom].total += (p.monto||0);
+    porProf[nom].count++;
+  });
+  document.getElementById('caja-profesionales').innerHTML = Object.keys(porProf).length===0
+    ? '<div style="color:var(--muted);font-size:13px;font-style:italic">Sin datos</div>'
+    : Object.entries(porProf).sort((a,b)=>b[1].total-a[1].total).map(([nom,d]) => `
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:13px;font-weight:600;flex:1">${nom}</div>
+          <div style="font-size:12px;color:var(--muted)">${d.count} pago${d.count!==1?'s':''}</div>
+          <div style="font-size:15px;font-weight:700;color:var(--gold)">${formatCOP(d.total)}</div>
+        </div>`).join('');
+}
+
+// ── Egreso modal ──
+function openEgresoModal() {
+  document.getElementById('egreso-concepto').value = '';
+  document.getElementById('egreso-monto-display').value = '';
+  document.getElementById('egreso-monto-raw').value = '0';
+  document.getElementById('egreso-categoria').value = 'insumos';
+  selEgresoMetodo('efectivo', document.getElementById('egm-efectivo'));
+  document.getElementById('modal-egreso').classList.add('open');
+  setTimeout(() => document.getElementById('egreso-concepto').focus(), 200);
+}
+
+function fmtEgresoMonto(el) {
+  const raw = el.value.replace(/[^0-9]/g,'');
+  document.getElementById('egreso-monto-raw').value = raw || '0';
+  el.value = raw ? '$'+Number(raw).toLocaleString('es-CO') : '';
+}
+
+function selEgresoMetodo(m, btn) {
+  document.getElementById('egreso-metodo').value = m;
+  ['efectivo','transferencia','tarjeta'].forEach(x => {
+    const b = document.getElementById('egm-'+x);
+    if(b){ b.style.background='rgba(255,255,255,0.03)'; b.style.color='var(--muted)'; b.style.borderColor='var(--border)'; }
+  });
+  if(btn){ btn.style.background=METODO_COLOR[m]+'33'; btn.style.color=METODO_COLOR[m]; btn.style.borderColor=METODO_COLOR[m]; }
+}
+
+function selAbonoMetodo(m, btn) {
+  document.getElementById('abono-metodo').value = m;
+  ['efectivo','transferencia','tarjeta'].forEach(x => {
+    const b = document.getElementById('abm-'+x);
+    if(b){ b.style.background='rgba(255,255,255,0.03)'; b.style.color='var(--muted)'; b.style.borderColor='var(--border)'; }
+  });
+  if(btn){ btn.style.background=METODO_COLOR[m]+'33'; btn.style.color=METODO_COLOR[m]; btn.style.borderColor=METODO_COLOR[m]; }
+}
+
+async function guardarEgreso() {
+  const concepto = document.getElementById('egreso-concepto').value.trim();
+  const monto = parseFloat(document.getElementById('egreso-monto-raw').value) || 0;
+  if(!concepto){ showToast('Escribe un concepto','⚠'); return; }
+  if(monto <= 0){ showToast('El monto debe ser mayor a $0','⚠'); return; }
+  const egreso = {
+    concepto, monto,
+    categoria: document.getElementById('egreso-categoria').value,
+    metodo: document.getElementById('egreso-metodo').value,
+    fecha: document.getElementById('caja-fecha')?.value || toLocalDateStr(new Date()),
+    usuario: currentUser ? currentUser.email.split('@')[0] : 'Recepción',
+    creadoEn: new Date().toISOString()
+  };
+  try {
+    await fsConReintento(() => db.collection('egresos').add(egreso));
+    showToast('✅ Egreso registrado', '📤');
+    closeModal('modal-egreso');
+    renderCaja();
+  } catch(e) { showToast('❌ Error: '+e.message,'🚫'); }
+}
+
+async function eliminarEgreso(docId) {
+  if(!confirm('¿Eliminar este egreso?')) return;
+  try {
+    await fsConReintento(() => db.collection('egresos').doc(docId).delete());
+    showToast('✅ Egreso eliminado','🧹');
+    renderCaja();
+  } catch(e){ showToast('❌ Error: '+e.message,'🚫'); }
+}
+
+function enviarCierreCaja() {
+  const fecha = document.getElementById('caja-fecha')?.value || toLocalDateStr(new Date());
+  const realized = calCitas.filter(c => c.estado === 'realizada');
+  const pagosHoy = realized.flatMap(c => getPagos(c).filter(p=>p.fecha===fecha).map(p=>({...p,cita:c})));
+  const egresosHoy = calEgresos.filter(e => e.fecha === fecha);
+  const totalIngresos = pagosHoy.reduce((s,p)=>s+(p.monto||0),0);
+  const totalEgresos  = egresosHoy.reduce((s,e)=>s+(e.monto||0),0);
+  const neto = totalIngresos - totalEgresos;
+
+  const fechaLegible = new Date(fecha+'T12:00:00').toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+  let msg = `📊 *CIERRE DE CAJA — ${fechaLegible.toUpperCase()}*\n`;
+  msg += `Harmony Skin Tech\n\n`;
+  msg += `💰 *INGRESOS:* ${formatCOP(totalIngresos)}\n`;
+  msg += `📤 *EGRESOS:* ${formatCOP(totalEgresos)}\n`;
+  msg += `✅ *NETO DEL DÍA:* ${formatCOP(neto)}\n\n`;
+
+  if(pagosHoy.length > 0) {
+    msg += `*Detalle ingresos:*\n`;
+    pagosHoy.forEach(p => {
+      const pac = patients.find(x=>String(x.id)===String(p.cita.pid));
+      const nom = pac ? pac.nombre+' '+pac.apellido : (p.cita.pnom||'Paciente');
+      msg += `• ${nom} — ${(p.cita.svc||'').substring(0,25)} — ${formatCOP(p.monto)} ${METODO_ICON[p.metodo||'efectivo']}\n`;
+    });
+    msg += '\n';
+  }
+
+  if(egresosHoy.length > 0) {
+    msg += `*Egresos:*\n`;
+    egresosHoy.forEach(e => { msg += `• ${EGRESO_CAT_ICON[e.categoria]||'📦'} ${e.concepto} — ${formatCOP(e.monto)}\n`; });
+    msg += '\n';
+  }
+
+  // Medios de pago
+  const porMetodo = {};
+  pagosHoy.forEach(p=>{ const m=p.metodo||'efectivo'; porMetodo[m]=(porMetodo[m]||0)+(p.monto||0); });
+  if(Object.keys(porMetodo).length > 0) {
+    msg += `*Medios de pago:*\n`;
+    Object.entries(porMetodo).forEach(([m,v])=>{ msg += `${METODO_ICON[m]} ${m.charAt(0).toUpperCase()+m.slice(1)}: ${formatCOP(v)}\n`; });
+    msg += '\n';
+  }
+
+  msg += `_Generado por Harmony CRM_`;
+
+  // Copiar al portapapeles
+  navigator.clipboard.writeText(msg).then(() => {
+    showToast('✅ Resumen copiado — ábrelo en WhatsApp', '💬');
+  }).catch(() => {
+    // Si no hay permisos de clipboard, abrir WhatsApp directo
+    const adminPhone = '573001234567';
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`,'_blank');
+  });
 }
 
 function renderReportes() {
