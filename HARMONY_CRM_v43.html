@@ -919,10 +919,10 @@
           <label>Abono recibido (COP)</label>
           <div style="position:relative">
             <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--mint);font-weight:600;font-size:15px;pointer-events:none">$</span>
-            <input type="text" id="cita-abono" placeholder="0" style="padding-left:28px" oninput="formatInputCOP(this,'cita-abono-raw');showSaldoLive()" autocomplete="off">
+            <input type="text" id="cita-abono" placeholder="0" style="padding-left:28px" oninput="formatInputCOP(this,'cita-abono-raw');showSaldoLive();toggleMetodoPago(this.value)" autocomplete="off">
             <input type="hidden" id="cita-abono-raw" value="0">
           </div>
-          <div style="display:flex;gap:6px;margin-top:8px">
+          <div id="cita-metodo-wrap" style="display:none;gap:6px;margin-top:8px">
             <button type="button" onclick="selCitaMetodo('efectivo',this)" id="cmt-efectivo" class="btn btn-sm" style="background:rgba(111,207,176,0.2);color:var(--mint);border:1px solid var(--mint);font-size:11px;padding:4px 10px">💵 Efectivo</button>
             <button type="button" onclick="selCitaMetodo('transferencia',this)" id="cmt-transferencia" class="btn btn-sm" style="background:rgba(255,255,255,0.03);color:var(--muted);border:1px solid var(--border);font-size:11px;padding:4px 10px">🏦 Transferencia</button>
             <button type="button" onclick="selCitaMetodo('tarjeta',this)" id="cmt-tarjeta" class="btn btn-sm" style="background:rgba(255,255,255,0.03);color:var(--muted);border:1px solid var(--border);font-size:11px;padding:4px 10px">💳 Tarjeta</button>
@@ -4188,6 +4188,8 @@ function openNewCita(f,t,sid){
   document.getElementById('btn-del-cita').style.display='none';
   setCitaEstado('agendada');
   selCitaMetodo('efectivo', document.getElementById('cmt-efectivo'));
+  const mw = document.getElementById('cita-metodo-wrap');
+  if(mw) mw.style.display = 'none';
   document.getElementById('modal-cita').classList.add('open');
 }
 
@@ -5365,6 +5367,12 @@ function selEgresoMetodo(m, btn) {
     if(b){ b.style.background='rgba(255,255,255,0.03)'; b.style.color='var(--muted)'; b.style.borderColor='var(--border)'; }
   });
   if(btn){ btn.style.background=METODO_COLOR[m]+'33'; btn.style.color=METODO_COLOR[m]; btn.style.borderColor=METODO_COLOR[m]; }
+}
+
+function toggleMetodoPago(val) {
+  const raw = val.replace(/[^0-9]/g,'');
+  const wrap = document.getElementById('cita-metodo-wrap');
+  if(wrap) wrap.style.display = (parseInt(raw)||0) > 0 ? 'flex' : 'none';
 }
 
 function selCitaMetodo(m, btn) {
