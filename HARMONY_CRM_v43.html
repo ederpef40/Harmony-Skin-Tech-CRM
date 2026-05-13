@@ -2419,7 +2419,6 @@ function renderDashboard() {
   const total = patients.length;
   // Use real revenue from realized citas
   const allRealized = calCitas.filter(c=>c.estado==='realizada');
-  const totalRev = allRealized.reduce((s,c)=>s+(c.precio||0),0);
   // Abonos y pendientes desde citas realizadas
   const totalAbonado   = allRealized.reduce((s,c)=>s+(c.abono||0),0);
   const totalPendiente = allRealized.reduce((s,c)=>s+Math.max(0,(c.precio||0)-(c.abono||0)),0);
@@ -3997,7 +3996,7 @@ function renderCalendar(){
     return`<div style="padding:12px;text-align:center;border-right:1px solid var(--border)"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${s.color};margin-right:6px;vertical-align:middle"></span><span style="font-size:13px;font-weight:600">${s.nombre}</span>${cnt>0?`<span style="margin-left:6px;background:${s.color}33;color:${s.color};border-radius:10px;padding:1px 8px;font-size:11px">${cnt} citas</span>`:''}`;
   }).join('');
 
-  const estadoIcon={agendada:'🟡',realizada:'🟢',cancelada:'🔴',reagendada:'🔵'};
+  const estadoIcon={agendada:'🟡',realizada:'🟢',cancelada:'🔴',reagendada:'🔵',no_vino:'🚫'};
   let html='';
   for(let h=7;h<=20;h++){for(const m of['00','30']){const t=h.toString().padStart(2,'0')+':'+m,nh=m==='00'?h.toString().padStart(2,'0')+':30':(h+1).toString().padStart(2,'0')+':00',dsh=m==='30';
     html+=`<div style="display:grid;grid-template-columns:${cols};border-bottom:1px ${dsh?'dashed':'solid'} rgba(255,255,255,0.05);min-height:${dsh?36:52}px;width:100%;box-sizing:border-box;"><div style="padding:4px 8px;font-size:${dsh?10:11}px;color:${dsh?'rgba(255,255,255,0.15)':'var(--muted)'};border-right:1px solid var(--border);padding-top:8px;flex-shrink:0;">${t}</div>${visibleStaff.map(s=>{
@@ -4188,6 +4187,7 @@ function openNewCita(f,t,sid){
   document.getElementById('cita-staff').value=sid||'';
   document.getElementById('btn-del-cita').style.display='none';
   setCitaEstado('agendada');
+  selCitaMetodo('efectivo', document.getElementById('cmt-efectivo'));
   document.getElementById('modal-cita').classList.add('open');
 }
 
