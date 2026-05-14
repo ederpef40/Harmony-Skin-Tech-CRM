@@ -3556,9 +3556,18 @@ function viewPatient(idx) {
   });
   var citasRealizadas = histCitas.filter(function(c){ return c.estado==='realizada'; });
   var citasPendientes = histCitas.filter(function(c){ return c.estado==='agendada'; });
+  // Citas con precio que permiten registrar pagos (realizadas + agendadas)
+  var citasConPagos = histCitas.filter(function(c){ return (c.precio||0)>0 && c.estado!=='no_vino'; });
+  // FACTURADO = solo servicios YA realizados
   var totalFacturado = citasRealizadas.reduce(function(s,c){ return s+(c.precio||0); },0);
-  var totalAbonado = citasRealizadas.reduce(function(s,c){ return s+(c.abono||0); },0);
+  // COBRADO = dinero realmente recibido de TODAS las citas (incluye anticipos)
+  var totalCobrado = citasConPagos.reduce(function(s,c){ return s+(c.abono||0); },0);
+  // ANTICIPOS = pagos recibidos por servicios AÚN NO realizados
+  var totalAnticipos = citasPendientes.reduce(function(s,c){ return s+(c.abono||0); },0);
+  // PENDIENTE = saldo de servicios ya realizados
   var totalPendiente = citasRealizadas.reduce(function(s,c){ return s+Math.max(0,(c.precio||0)-(c.abono||0)); },0);
+  // Mantener compatibilidad
+  var totalAbonado = totalCobrado;
 
   var histHTML = citasRealizadas.length===0
     ? '<div style="color:var(--muted);font-style:italic;text-align:center;padding:20px">Sin servicios registrados</div>'
@@ -3576,23 +3585,28 @@ function viewPatient(idx) {
           +'</div>';
       }).join('');
 
-  var pagosHTML = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">'
-    +'<div style="background:var(--surface2);border-radius:12px;padding:16px;text-align:center;border:1px solid var(--border)"><div style="font-size:11px;color:var(--muted);margin-bottom:6px">FACTURADO</div><div style="font-size:20px;font-weight:700;color:var(--gold)">$'+totalFacturado.toLocaleString('es-CO')+'</div></div>'
-    +'<div style="background:var(--surface2);border-radius:12px;padding:16px;text-align:center;border:1px solid var(--border)"><div style="font-size:11px;color:var(--muted);margin-bottom:6px">ABONADO</div><div style="font-size:20px;font-weight:700;color:var(--mint)">$'+totalAbonado.toLocaleString('es-CO')+'</div></div>'
-    +'<div style="background:var(--surface2);border-radius:12px;padding:16px;text-align:center;border:1px solid '+(totalPendiente>0?'rgba(255,169,77,0.3)':'var(--border)')+'"><div style="font-size:11px;color:var(--muted);margin-bottom:6px">PENDIENTE</div><div style="font-size:20px;font-weight:700;color:'+(totalPendiente>0?'var(--warn)':'var(--mint)')+'">$'+totalPendiente.toLocaleString('es-CO')+'</div></div>'
+  var pagosHTML = '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px">'
+    +'<div style="background:var(--surface2);border-radius:12px;padding:14px;text-align:center;border:1px solid var(--border)"><div style="font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px">Facturado</div><div style="font-size:18px;font-weight:700;color:var(--gold)">$'+totalFacturado.toLocaleString('es-CO')+'</div><div style="font-size:10px;color:var(--muted);margin-top:2px">Servicios realizados</div></div>'
+    +'<div style="background:var(--surface2);border-radius:12px;padding:14px;text-align:center;border:1px solid rgba(111,207,176,0.3)"><div style="font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px">Total cobrado</div><div style="font-size:18px;font-weight:700;color:var(--mint)">$'+totalCobrado.toLocaleString('es-CO')+'</div><div style="font-size:10px;color:var(--muted);margin-top:2px">Dinero recibido</div></div>'
+    +(totalAnticipos>0?'<div style="background:rgba(122,184,224,0.08);border-radius:12px;padding:14px;text-align:center;border:1px solid rgba(122,184,224,0.3)"><div style="font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px">Anticipos</div><div style="font-size:18px;font-weight:700;color:var(--sky)">$'+totalAnticipos.toLocaleString('es-CO')+'</div><div style="font-size:10px;color:var(--muted);margin-top:2px">Citas pendientes</div></div>':'')
+    +(totalPendiente>0?'<div style="background:rgba(255,169,77,0.06);border-radius:12px;padding:14px;text-align:center;border:1px solid rgba(255,169,77,0.3)"><div style="font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px">Saldo pendiente</div><div style="font-size:18px;font-weight:700;color:var(--warn)">$'+totalPendiente.toLocaleString('es-CO')+'</div><div style="font-size:10px;color:var(--muted);margin-top:2px">De servicios realizados</div></div>':'')
     +'</div>'
-    +(citasRealizadas.length===0?'<div style="color:var(--muted);font-style:italic;font-size:13px">Sin pagos</div>'
-    :citasRealizadas.sort(function(a,b){ return b.fecha.localeCompare(a.fecha); }).map(function(c,i){
+    +(citasConPagos.length===0?'<div style="color:var(--muted);font-style:italic;font-size:13px">Sin pagos registrados</div>'
+    :citasConPagos.sort(function(a,b){ return b.fecha.localeCompare(a.fecha); }).map(function(c,i){
       var saldo=Math.max(0,(c.precio||0)-(c.abono||0));
       var pct=c.precio>0?Math.round(((c.abono||0)/c.precio)*100):0;
       var citaRealIdx = calCitas.indexOf(c);
-      return '<div style="background:var(--surface2);border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid var(--border)">'
-        +'<div style="display:flex;justify-content:space-between;margin-bottom:8px"><div style="font-size:13px;font-weight:500">'+(c.svc||'Servicio')+' · '+formatDate(c.fecha)+'</div>'
+      var esAgendada = c.estado==='agendada'||!c.estado;
+      var borderColor = esAgendada?'rgba(122,184,224,0.4)':'var(--border)';
+      var etiqueta = esAgendada?'<span style="font-size:10px;background:rgba(122,184,224,0.15);color:var(--sky);border-radius:4px;padding:2px 7px;margin-left:6px">🕐 Anticipo</span>':'';
+      return '<div style="background:var(--surface2);border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid '+borderColor+'">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+        +'<div style="font-size:13px;font-weight:500">'+(c.svc||'Servicio')+' · '+formatDate(c.fecha)+etiqueta+'</div>'
         +'<div style="font-size:12px;color:'+(saldo>0?'var(--warn)':'var(--mint)')+'">'+( saldo>0?'Debe $'+saldo.toLocaleString('es-CO'):'✓ Saldo 0')+'</div></div>'
         +'<div style="background:var(--border);border-radius:4px;height:6px;margin-bottom:6px"><div style="background:'+(saldo>0?'var(--warn)':'var(--mint)')+';height:100%;width:'+pct+'%;border-radius:4px"></div></div>'
         +'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted)">'
-        +'<span>Valor: $'+(c.precio||0).toLocaleString('es-CO')+'</span><span>Abono: $'+(c.abono||0).toLocaleString('es-CO')+'</span><span>'+pct+'% pagado</span></div>'
-        +(saldo>0?'<button onclick="registrarAbono('+citaRealIdx+','+idx+')" style="margin-top:8px;background:rgba(255,169,77,0.15);color:var(--warn);border:1px solid rgba(255,169,77,0.3);border-radius:8px;padding:5px 12px;font-size:11px;cursor:pointer">+ Registrar abono</button>':'')
+        +'<span>Valor: $'+(c.precio||0).toLocaleString('es-CO')+'</span><span>Cobrado: $'+(c.abono||0).toLocaleString('es-CO')+'</span><span>'+pct+'% pagado</span></div>'
+        +(saldo>0?'<button onclick="registrarAbono('+citaRealIdx+','+idx+')" style="margin-top:8px;background:rgba(255,169,77,0.15);color:var(--warn);border:1px solid rgba(255,169,77,0.3);border-radius:8px;padding:5px 12px;font-size:11px;cursor:pointer">💰 Registrar pago</button>':'')
         +'</div>';
     }).join(''));
 
@@ -5245,10 +5259,11 @@ function initCajaFecha() {
 function renderCaja() {
   initCajaFecha();
   const fecha = document.getElementById('caja-fecha')?.value || toLocalDateStr(new Date());
-  const realized = calCitas.filter(c => c.estado === 'realizada');
+  // Todas las citas con precio (el dinero puede entrar antes de realizar el servicio)
+  const citasActivas = calCitas.filter(c => (c.precio||0) > 0 && c.estado !== 'no_vino' && c.estado !== 'cancelada');
 
-  // Pagos recibidos en esta fecha
-  const pagosHoy = realized.flatMap(c =>
+  // Pagos recibidos en esta fecha — de TODAS las citas (anticipos + servicios realizados)
+  const pagosHoy = citasActivas.flatMap(c =>
     getPagos(c).filter(p => p.fecha === fecha).map(p => ({...p, cita: c}))
   );
 
@@ -5425,8 +5440,8 @@ async function eliminarEgreso(docId) {
 
 function _getCierreDatos() {
   const fecha = document.getElementById('caja-fecha')?.value || toLocalDateStr(new Date());
-  const realized = calCitas.filter(c => c.estado === 'realizada');
-  const pagosHoy = realized.flatMap(c => getPagos(c).filter(p=>p.fecha===fecha).map(p=>({...p,cita:c})));
+  const citasActivas = calCitas.filter(c => (c.precio||0)>0 && c.estado!=='no_vino' && c.estado!=='cancelada');
+  const pagosHoy = citasActivas.flatMap(c => getPagos(c).filter(p=>p.fecha===fecha).map(p=>({...p,cita:c})));
   const egresosHoy = calEgresos.filter(e => e.fecha === fecha);
   const totalIngresos = pagosHoy.reduce((s,p)=>s+(p.monto||0),0);
   const totalEgresos  = egresosHoy.reduce((s,e)=>s+(e.monto||0),0);
