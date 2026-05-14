@@ -4775,15 +4775,31 @@ function registrarAbono(citaIdx, pacienteIdx) {
   var abonado = c.abono || 0;
   var saldo = Math.max(0, precio - abonado);
 
-  // Detectar si hay abono sin pagos[] (sistema anterior)
+  // Mostrar pagos existentes con opción de corregir fecha
+  const pagosExistentes = c.pagos && c.pagos.length > 0 ? c.pagos : null;
   const tienePagosSinFecha = abonado > 0 && (!c.pagos || c.pagos.length === 0);
-  const alertaSinFecha = tienePagosSinFecha
-    ? '<div style="background:rgba(122,184,224,0.1);border:1px solid rgba(122,184,224,0.3);border-radius:8px;padding:10px 12px;margin-top:10px;font-size:12px;color:var(--sky)">'
-      + '⚠ Hay <b>$' + abonado.toLocaleString('es-CO') + '</b> registrados sin fecha de pago. '
-      + '<br>Selecciona la fecha real en que se recibió ese dinero y presiona <b>"Registrar fecha del anticipo"</b>.'
-      + '<br><button onclick="migrarAbonoPrevio()" style="margin-top:8px;background:rgba(122,184,224,0.2);color:var(--sky);border:1px solid rgba(122,184,224,0.4);border-radius:7px;padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer">📅 Registrar fecha del anticipo ($' + abonado.toLocaleString('es-CO') + ')</button>'
-      + '</div>'
-    : '';
+
+  let alertaSinFecha = '';
+  if(pagosExistentes) {
+    // Mostrar pagos registrados con botón para corregir fecha
+    alertaSinFecha = '<div style="margin-top:10px">'
+      + '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Pagos registrados</div>'
+      + pagosExistentes.map((p, i) =>
+          '<div style="background:rgba(122,184,224,0.08);border:1px solid rgba(122,184,224,0.2);border-radius:8px;padding:8px 12px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:8px">'
+          + '<div><span style="font-weight:600;color:var(--mint)">$' + (p.monto||0).toLocaleString('es-CO') + '</span>'
+          + ' · ' + (p.fecha||'Sin fecha')
+          + ' · ' + (p.metodo ? (p.metodo==='efectivo'?'💵':p.metodo==='transferencia'?'🏦':'💳')+' '+p.metodo : '—') + '</div>'
+          + '<button onclick="corregirFechaPago(' + i + ')" style="background:rgba(232,201,122,0.15);color:var(--gold);border:1px solid rgba(232,201,122,0.3);border-radius:6px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer">✏ Editar fecha</button>'
+          + '</div>'
+        ).join('')
+      + '</div>';
+  } else if(tienePagosSinFecha) {
+    alertaSinFecha = '<div style="background:rgba(122,184,224,0.1);border:1px solid rgba(122,184,224,0.3);border-radius:8px;padding:10px 12px;margin-top:10px;font-size:12px;color:var(--sky)">'
+      + '⚠ Hay <b>$' + abonado.toLocaleString('es-CO') + '</b> registrados sin fecha. '
+      + 'Selecciona la fecha real y presiona el botón.'
+      + '<br><button onclick="migrarAbonoPrevio()" style="margin-top:8px;background:rgba(122,184,224,0.2);color:var(--sky);border:1px solid rgba(122,184,224,0.4);border-radius:7px;padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer">📅 Registrar fecha ($' + abonado.toLocaleString('es-CO') + ')</button>'
+      + '</div>';
+  }
 
   document.getElementById('modal-abono-info').innerHTML =
     '<div style="font-weight:600;margin-bottom:8px">' + (c.svc||'Servicio') + '</div>' +
@@ -4800,6 +4816,28 @@ function registrarAbono(citaIdx, pacienteIdx) {
   selAbonoMetodo('efectivo', document.getElementById('abm-efectivo'));
   document.getElementById('modal-abono').classList.add('open');
   setTimeout(() => document.getElementById('abono-monto-input').focus(), 200);
+}
+
+// Corregir fecha de un pago ya registrado en pagos[]
+async function corregirFechaPago(pagoIdx) {
+  if(_abonoCitaIdx === null) return;
+  var c = calCitas[_abonoCitaIdx];
+  if(!c.pagos || !c.pagos[pagoIdx]) return;
+  var pagoActual = c.pagos[pagoIdx];
+  var nuevaFecha = document.getElementById('abono-fecha')?.value;
+  if(!nuevaFecha) { showToast('Selecciona la fecha correcta arriba', '⚠'); return; }
+  if(nuevaFecha === pagoActual.fecha) { showToast('La fecha es la misma — cámbiala primero', '⚠'); return; }
+  if(!confirm('¿Cambiar la fecha del pago de $' + (pagoActual.monto||0).toLocaleString('es-CO') + '\nde ' + pagoActual.fecha + ' → ' + nuevaFecha + '?')) return;
+  calCitas[_abonoCitaIdx].pagos[pagoIdx].fecha = nuevaFecha;
+  try {
+    await fsConReintento(() => db.collection('citas').doc(c._docId).update({ pagos: calCitas[_abonoCitaIdx].pagos }));
+    showToast('✅ Fecha corregida — pago aparece en Caja del ' + nuevaFecha, '📅');
+    closeModal('modal-abono');
+    renderCaja && renderCaja();
+  } catch(e) {
+    calCitas[_abonoCitaIdx].pagos[pagoIdx].fecha = pagoActual.fecha;
+    showToast('❌ Error: ' + e.message, '🚫');
+  }
 }
 
 // Migrar abono antiguo (sin fecha) al nuevo sistema con fecha real
