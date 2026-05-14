@@ -4775,13 +4775,23 @@ function registrarAbono(citaIdx, pacienteIdx) {
   var abonado = c.abono || 0;
   var saldo = Math.max(0, precio - abonado);
 
+  // Detectar si hay abono sin pagos[] (sistema anterior)
+  const tienePagosSinFecha = abonado > 0 && (!c.pagos || c.pagos.length === 0);
+  const alertaSinFecha = tienePagosSinFecha
+    ? '<div style="background:rgba(122,184,224,0.1);border:1px solid rgba(122,184,224,0.3);border-radius:8px;padding:10px 12px;margin-top:10px;font-size:12px;color:var(--sky)">'
+      + '⚠ Hay <b>$' + abonado.toLocaleString('es-CO') + '</b> registrados sin fecha de pago. '
+      + '<br>Selecciona la fecha real en que se recibió ese dinero y presiona <b>"Registrar fecha del anticipo"</b>.'
+      + '<br><button onclick="migrarAbonoPrevio()" style="margin-top:8px;background:rgba(122,184,224,0.2);color:var(--sky);border:1px solid rgba(122,184,224,0.4);border-radius:7px;padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer">📅 Registrar fecha del anticipo ($' + abonado.toLocaleString('es-CO') + ')</button>'
+      + '</div>'
+    : '';
+
   document.getElementById('modal-abono-info').innerHTML =
     '<div style="font-weight:600;margin-bottom:8px">' + (c.svc||'Servicio') + '</div>' +
     '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px">' +
     '<div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">VALOR</div><div style="font-weight:700;color:var(--gold)">$' + precio.toLocaleString('es-CO') + '</div></div>' +
-    '<div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">YA ABONADO</div><div style="font-weight:700;color:var(--mint)">$' + abonado.toLocaleString('es-CO') + '</div></div>' +
+    '<div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">YA COBRADO</div><div style="font-weight:700;color:var(--mint)">$' + abonado.toLocaleString('es-CO') + '</div></div>' +
     '<div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">SALDO</div><div style="font-weight:700;color:' + (saldo>0?'var(--warn)':'var(--mint)') + '">$' + saldo.toLocaleString('es-CO') + '</div></div>' +
-    '</div>';
+    '</div>' + alertaSinFecha;
 
   document.getElementById('abono-monto-input').value = '';
   document.getElementById('abono-monto-raw').value = '0';
@@ -4790,6 +4800,32 @@ function registrarAbono(citaIdx, pacienteIdx) {
   selAbonoMetodo('efectivo', document.getElementById('abm-efectivo'));
   document.getElementById('modal-abono').classList.add('open');
   setTimeout(() => document.getElementById('abono-monto-input').focus(), 200);
+}
+
+// Migrar abono antiguo (sin fecha) al nuevo sistema con fecha real
+async function migrarAbonoPrevio() {
+  if(_abonoCitaIdx === null) return;
+  var c = calCitas[_abonoCitaIdx];
+  var abonado = c.abono || 0;
+  var fechaSeleccionada = document.getElementById('abono-fecha')?.value || toLocalDateStr(new Date());
+  var metodo = document.getElementById('abono-metodo')?.value || 'efectivo';
+  if(!confirm('¿Registrar $' + abonado.toLocaleString('es-CO') + ' como pago recibido el ' + fechaSeleccionada + '?\n\nEsto corrige la fecha del anticipo existente.')) return;
+  if(!calCitas[_abonoCitaIdx].pagos) calCitas[_abonoCitaIdx].pagos = [];
+  calCitas[_abonoCitaIdx].pagos.push({
+    monto: abonado,
+    fecha: fechaSeleccionada,
+    metodo: metodo,
+    usuario: currentUser ? currentUser.email.split('@')[0] : 'Sistema'
+  });
+  try {
+    await fsConReintento(() => db.collection('citas').doc(c._docId).update({ pagos: calCitas[_abonoCitaIdx].pagos }));
+    showToast('✅ Fecha del anticipo registrada — aparece en Caja del ' + fechaSeleccionada, '📅');
+    closeModal('modal-abono');
+    renderCaja && renderCaja();
+  } catch(e) {
+    calCitas[_abonoCitaIdx].pagos.pop();
+    showToast('❌ Error: ' + e.message, '🚫');
+  }
 }
 
 function previewAbonoSaldo() {
