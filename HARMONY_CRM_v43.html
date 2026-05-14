@@ -1540,6 +1540,11 @@
     </div>
     <div id="abono-saldo-preview" style="font-size:13px;min-height:18px;margin-bottom:16px"></div>
     <div class="form-group" style="margin-bottom:16px">
+      <label>Fecha del pago</label>
+      <input type="date" id="abono-fecha" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">Cambia la fecha si el pago fue en un día anterior</div>
+    </div>
+    <div class="form-group" style="margin-bottom:16px">
       <label>Medio de pago</label>
       <div style="display:flex;gap:8px;margin-top:6px">
         <button onclick="selAbonoMetodo('efectivo',this)" id="abm-efectivo" class="btn btn-sm" style="background:rgba(111,207,176,0.2);color:var(--mint);border:1px solid var(--mint)">💵 Efectivo</button>
@@ -1550,7 +1555,7 @@
     </div>
     <div class="form-actions">
       <button class="btn btn-outline" onclick="closeModal('modal-abono')">Cancelar</button>
-      <button class="btn btn-primary" onclick="confirmarAbono()">💰 Guardar abono</button>
+      <button class="btn btn-primary" onclick="confirmarAbono()">💰 Guardar pago</button>
     </div>
   </div>
 </div>
@@ -4781,6 +4786,8 @@ function registrarAbono(citaIdx, pacienteIdx) {
   document.getElementById('abono-monto-input').value = '';
   document.getElementById('abono-monto-raw').value = '0';
   document.getElementById('abono-saldo-preview').textContent = '';
+  document.getElementById('abono-fecha').value = toLocalDateStr(new Date());
+  selAbonoMetodo('efectivo', document.getElementById('abm-efectivo'));
   document.getElementById('modal-abono').classList.add('open');
   setTimeout(() => document.getElementById('abono-monto-input').focus(), 200);
 }
@@ -4820,11 +4827,12 @@ function confirmarAbono() {
   }
 
   calCitas[_abonoCitaIdx].abono = totalNuevo;
-  // Guardar pago con fecha y medio de pago para contabilidad exacta
+  // Guardar pago con fecha seleccionada (permite registrar pagos de días anteriores)
+  const fechaPago = document.getElementById('abono-fecha')?.value || toLocalDateStr(new Date());
   if(!calCitas[_abonoCitaIdx].pagos) calCitas[_abonoCitaIdx].pagos = [];
   calCitas[_abonoCitaIdx].pagos.push({
     monto: valor,
-    fecha: toLocalDateStr(new Date()),
+    fecha: fechaPago,
     metodo: document.getElementById('abono-metodo')?.value || 'efectivo',
     usuario: currentUser ? currentUser.email.split('@')[0] : 'Recepción'
   });
