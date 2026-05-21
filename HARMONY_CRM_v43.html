@@ -2146,7 +2146,8 @@ window.recuperarPacientesPerdidos = recuperarPacientesPerdidos;
 // citas antiguas sin pagos[] → trata el abono acumulado como un solo pago en c.fecha
 function getPagos(c) {
   if(c.pagos && c.pagos.length > 0) return c.pagos;
-  if((c.abono||0) > 0) return [{monto: c.abono, fecha: c.fecha, usuario: 'Sistema'}];
+  // Citas antiguas sin pagos[]: se asume efectivo (método no fue registrado originalmente)
+  if((c.abono||0) > 0) return [{monto: c.abono, fecha: c.fecha, usuario: 'Sistema', metodo: 'efectivo'}];
   return [];
 }
 // Suma de pagos de un array de citas recibidos en un mes/año específico
@@ -4785,11 +4786,18 @@ function registrarAbono(citaIdx, pacienteIdx) {
     alertaSinFecha = '<div style="margin-top:10px">'
       + '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Pagos registrados</div>'
       + pagosExistentes.map((p, i) =>
-          '<div style="background:rgba(122,184,224,0.08);border:1px solid rgba(122,184,224,0.2);border-radius:8px;padding:8px 12px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:8px">'
+          '<div style="background:rgba(122,184,224,0.08);border:1px solid rgba(122,184,224,0.2);border-radius:8px;padding:8px 12px;margin-bottom:6px">'
+          + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">'
           + '<div><span style="font-weight:600;color:var(--mint)">$' + (p.monto||0).toLocaleString('es-CO') + '</span>'
           + ' · ' + (p.fecha||'Sin fecha')
           + ' · ' + (p.metodo ? (p.metodo==='efectivo'?'💵':p.metodo==='transferencia'?'🏦':'💳')+' '+p.metodo : '—') + '</div>'
-          + '<button onclick="corregirFechaPago(' + i + ')" style="background:rgba(232,201,122,0.15);color:var(--gold);border:1px solid rgba(232,201,122,0.3);border-radius:6px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer">✏ Editar fecha</button>'
+          + '<button onclick="corregirPago(' + i + ')" style="background:rgba(232,201,122,0.15);color:var(--gold);border:1px solid rgba(232,201,122,0.3);border-radius:6px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer">✏ Corregir</button>'
+          + '</div>'
+          + '<div style="display:flex;gap:6px">'
+          + '<button onclick="selMetodoPagoCorr(\'efectivo\',this,' + i + ')" class="cpa-met-' + i + ' btn btn-sm" style="font-size:10px;padding:3px 8px;' + ((!p.metodo||p.metodo==='efectivo')?'background:rgba(111,207,176,0.2);color:var(--mint);border:1px solid var(--mint)':'background:rgba(255,255,255,0.03);color:var(--muted);border:1px solid var(--border)') + '">💵 Efectivo</button>'
+          + '<button onclick="selMetodoPagoCorr(\'transferencia\',this,' + i + ')" class="cpa-met-' + i + ' btn btn-sm" style="font-size:10px;padding:3px 8px;' + ((p.metodo==='transferencia')?'background:rgba(122,184,224,0.2);color:var(--sky);border:1px solid var(--sky)':'background:rgba(255,255,255,0.03);color:var(--muted);border:1px solid var(--border)') + '">🏦 Transferencia</button>'
+          + '<button onclick="selMetodoPagoCorr(\'tarjeta\',this,' + i + ')" class="cpa-met-' + i + ' btn btn-sm" style="font-size:10px;padding:3px 8px;' + ((p.metodo==='tarjeta')?'background:rgba(167,139,250,0.2);color:var(--purple);border:1px solid var(--purple)':'background:rgba(255,255,255,0.03);color:var(--muted);border:1px solid var(--border)') + '">💳 Tarjeta</button>'
+          + '</div>'
           + '</div>'
         ).join('')
       + '</div>';
@@ -4818,24 +4826,48 @@ function registrarAbono(citaIdx, pacienteIdx) {
   setTimeout(() => document.getElementById('abono-monto-input').focus(), 200);
 }
 
-// Corregir fecha de un pago ya registrado en pagos[]
-async function corregirFechaPago(pagoIdx) {
+// Seleccionar medio de pago para corrección
+let _corrMetodos = {};
+function selMetodoPagoCorr(metodo, btn, pagoIdx) {
+  _corrMetodos[pagoIdx] = metodo;
+  const COLORS = { efectivo:'var(--mint)', transferencia:'var(--sky)', tarjeta:'var(--purple)' };
+  document.querySelectorAll('.cpa-met-' + pagoIdx).forEach(b => {
+    b.style.background = 'rgba(255,255,255,0.03)';
+    b.style.color = 'var(--muted)';
+    b.style.borderColor = 'var(--border)';
+  });
+  if(btn) {
+    btn.style.background = (COLORS[metodo]||'var(--mint)') + '33';
+    btn.style.color = COLORS[metodo]||'var(--mint)';
+    btn.style.borderColor = COLORS[metodo]||'var(--mint)';
+  }
+}
+
+// Corregir fecha Y medio de pago de un pago registrado
+async function corregirPago(pagoIdx) {
   if(_abonoCitaIdx === null) return;
   var c = calCitas[_abonoCitaIdx];
   if(!c.pagos || !c.pagos[pagoIdx]) return;
-  var pagoActual = c.pagos[pagoIdx];
-  var nuevaFecha = document.getElementById('abono-fecha')?.value;
-  if(!nuevaFecha) { showToast('Selecciona la fecha correcta arriba', '⚠'); return; }
-  if(nuevaFecha === pagoActual.fecha) { showToast('La fecha es la misma — cámbiala primero', '⚠'); return; }
-  if(!confirm('¿Cambiar la fecha del pago de $' + (pagoActual.monto||0).toLocaleString('es-CO') + '\nde ' + pagoActual.fecha + ' → ' + nuevaFecha + '?')) return;
+  var pagoActual = {...c.pagos[pagoIdx]};
+  var nuevaFecha = document.getElementById('abono-fecha')?.value || pagoActual.fecha;
+  var nuevoMetodo = _corrMetodos[pagoIdx] || pagoActual.metodo;
+  if(nuevaFecha === pagoActual.fecha && nuevoMetodo === pagoActual.metodo) {
+    showToast('No hay cambios — modifica la fecha o el medio de pago', '⚠'); return;
+  }
+  var cambios = [];
+  if(nuevaFecha !== pagoActual.fecha) cambios.push('fecha: ' + pagoActual.fecha + ' → ' + nuevaFecha);
+  if(nuevoMetodo !== pagoActual.metodo) cambios.push('medio: ' + (pagoActual.metodo||'—') + ' → ' + nuevoMetodo);
+  if(!confirm('¿Corregir pago de $' + (pagoActual.monto||0).toLocaleString('es-CO') + '?\n\n' + cambios.join('\n'))) return;
   calCitas[_abonoCitaIdx].pagos[pagoIdx].fecha = nuevaFecha;
+  calCitas[_abonoCitaIdx].pagos[pagoIdx].metodo = nuevoMetodo;
   try {
     await fsConReintento(() => db.collection('citas').doc(c._docId).update({ pagos: calCitas[_abonoCitaIdx].pagos }));
-    showToast('✅ Fecha corregida — pago aparece en Caja del ' + nuevaFecha, '📅');
+    showToast('✅ Pago corregido correctamente', '✅');
     closeModal('modal-abono');
     renderCaja && renderCaja();
   } catch(e) {
     calCitas[_abonoCitaIdx].pagos[pagoIdx].fecha = pagoActual.fecha;
+    calCitas[_abonoCitaIdx].pagos[pagoIdx].metodo = pagoActual.metodo;
     showToast('❌ Error: ' + e.message, '🚫');
   }
 }
@@ -5329,8 +5361,8 @@ let calEgresos = [];
 // Listener Firestore para egresos (se agrega en initFirestoreListeners)
 // Ver sección FIRESTORE LISTENERS
 
-const METODO_ICON = { efectivo:'💵', transferencia:'🏦', tarjeta:'💳' };
-const METODO_COLOR = { efectivo:'var(--mint)', transferencia:'var(--sky)', tarjeta:'var(--purple)' };
+const METODO_ICON = { efectivo:'💵', transferencia:'🏦', tarjeta:'💳', desconocido:'❓' };
+const METODO_COLOR = { efectivo:'var(--mint)', transferencia:'var(--sky)', tarjeta:'var(--purple)', desconocido:'var(--muted)' };
 const EGRESO_CAT_ICON = { insumos:'🧴', domicilio:'🛵', servicios:'🔧', alimentacion:'🍽', otro:'📦' };
 
 function initCajaFecha() {
