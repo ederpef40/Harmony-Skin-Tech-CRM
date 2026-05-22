@@ -2145,9 +2145,12 @@ window.recuperarPacientesPerdidos = recuperarPacientesPerdidos;
 // Retorna el array de pagos de una cita con compatibilidad hacia atrás:
 // citas antiguas sin pagos[] → trata el abono acumulado como un solo pago en c.fecha
 function getPagos(c) {
-  if(c.pagos && c.pagos.length > 0) return c.pagos;
-  // Citas antiguas sin pagos[]: se asume efectivo (método no fue registrado originalmente)
-  if((c.abono||0) > 0) return [{monto: c.abono, fecha: c.fecha, usuario: 'Sistema', metodo: 'efectivo'}];
+  if(c.pagos && c.pagos.length > 0) {
+    // Sanear: metodo siempre string o null (nunca undefined)
+    return c.pagos.map(p => ({...p, metodo: (p.metodo && typeof p.metodo==='string' && p.metodo.trim()) ? p.metodo.trim() : null}));
+  }
+  // Citas antiguas sin pagos[]: metodo null → se muestra como ❓ en el cierre
+  if((c.abono||0) > 0) return [{monto: c.abono, fecha: c.fecha, usuario: 'Sistema', metodo: null}];
   return [];
 }
 // Suma de pagos de un array de citas recibidos en un mes/año específico
@@ -4331,8 +4334,8 @@ function saveCita(){
     svc = 'Valoracion: ' + valMotivo.value;
     if(valCosto && valCosto.value) precio = getCOPValue('cita-val-costo') || 0;
   }
-  // Registrar pago inicial con medio de pago si hay abono
-  const metodoPago = document.getElementById('cita-metodo-pago')?.value || 'efectivo';
+  // Registrar pago con medio de pago — siempre string explícito, nunca undefined
+  const metodoPago = String(document.getElementById('cita-metodo-pago')?.value || 'efectivo');
   const pagosIniciales = abono > 0 ? [{
     monto: abono,
     fecha: f,
@@ -4340,13 +4343,36 @@ function saveCita(){
     usuario: currentUser ? currentUser.email.split('@')[0] : 'Recepción'
   }] : [];
 
+  // FIX: en modo edición, si el abono aumentó → agregar el delta como nuevo pago
+  let pagosFinales;
+  if(editCitaIdx !== null) {
+    const citaExistente = calCitas[editCitaIdx];
+    const abonoAnterior = citaExistente.abono || 0;
+    const pagosExistentes = (citaExistente.pagos || []).map(p => ({
+      ...p, metodo: String(p.metodo || 'efectivo') // sanear metodos existentes
+    }));
+    if(abono > abonoAnterior) {
+      // Hay un nuevo pago en esta edición — registrarlo con su método
+      pagosFinales = [...pagosExistentes, {
+        monto: abono - abonoAnterior,
+        fecha: f,
+        metodo: metodoPago,
+        usuario: currentUser ? currentUser.email.split('@')[0] : 'Recepción'
+      }];
+    } else {
+      pagosFinales = pagosExistentes;
+    }
+  } else {
+    pagosFinales = pagosIniciales;
+  }
+
   var cita={
     id: editCitaIdx!==null ? calCitas[editCitaIdx].id : Date.now(),
     fecha:f, hi:hi, hf:hf,
     staffId:sid, pid:pacId, pnom:pacNom,
     svc:svc, precio:precio, abono:abono, estado:estado,
     tipo: citaTipo,
-    pagos: editCitaIdx!==null ? (calCitas[editCitaIdx].pagos||[]) : pagosIniciales,
+    pagos: pagosFinales,
     mesesRetorno: parseInt((document.getElementById('cita-meses-retorno')||{value:'6'}).value)||6,
     notas:document.getElementById('cita-notas').value,
     creadoEn:new Date().toISOString(),
@@ -4939,7 +4965,7 @@ function confirmarAbono() {
   calCitas[_abonoCitaIdx].pagos.push({
     monto: valor,
     fecha: fechaPago,
-    metodo: document.getElementById('abono-metodo')?.value || 'efectivo',
+    metodo: String(document.getElementById('abono-metodo')?.value || 'efectivo'),
     usuario: currentUser ? currentUser.email.split('@')[0] : 'Recepción'
   });
   var p = patients[_abonoPacIdx];
@@ -5362,7 +5388,9 @@ let calEgresos = [];
 // Ver sección FIRESTORE LISTENERS
 
 const METODO_ICON = { efectivo:'💵', transferencia:'🏦', tarjeta:'💳', desconocido:'❓' };
-const METODO_COLOR = { efectivo:'var(--mint)', transferencia:'var(--sky)', tarjeta:'var(--purple)', desconocido:'var(--muted)' };
+const METODO_COLOR = { efectivo:'var(--mint)', transferencia:'var(--sky)', tarjeta:'var(--purple)', desconocido:'var(--warn)' };
+// Normaliza el método de pago: string explícito o 'desconocido'
+function normMetodo(m) { return (m && typeof m === 'string' && m.trim()) ? m.trim() : 'desconocido'; }
 const EGRESO_CAT_ICON = { insumos:'🧴', domicilio:'🛵', servicios:'🔧', alimentacion:'🍽', otro:'📦' };
 
 function initCajaFecha() {
@@ -5408,7 +5436,7 @@ function renderCaja() {
 
   // ── Medios de pago ──
   const porMetodo = {};
-  pagosHoy.forEach(p => { const m=p.metodo||'efectivo'; porMetodo[m]=(porMetodo[m]||0)+(p.monto||0); });
+  pagosHoy.forEach(p => { const m=normMetodo(p.metodo); porMetodo[m]=(porMetodo[m]||0)+(p.monto||0); });
   document.getElementById('caja-medios').innerHTML = totalIngresos===0
     ? '<div style="color:var(--muted);font-size:13px;padding:8px 0">Sin ingresos registrados</div>'
     : Object.entries(porMetodo).map(([m,v]) => {
@@ -5434,7 +5462,7 @@ function renderCaja() {
             <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nom}</div>
             <div style="font-size:11px;color:var(--muted)">${(p.cita.svc||'').substring(0,30)}</div>
           </div>
-          <div style="font-size:12px;color:${METODO_COLOR[p.metodo||'efectivo']}">${METODO_ICON[p.metodo||'efectivo']}</div>
+          <div style="font-size:12px;color:${METODO_COLOR[normMetodo(p.metodo)]}">${METODO_ICON[normMetodo(p.metodo)]}</div>
           <div style="font-size:14px;font-weight:700;color:var(--mint);white-space:nowrap">${formatCOP(p.monto)}</div>
         </div>`;
       }).join('');
@@ -5561,7 +5589,7 @@ function _getCierreDatos() {
   const totalEgresos  = egresosHoy.reduce((s,e)=>s+(e.monto||0),0);
   const neto = totalIngresos - totalEgresos;
   const porMetodo = {};
-  pagosHoy.forEach(p=>{ const m=p.metodo||'efectivo'; porMetodo[m]=(porMetodo[m]||0)+(p.monto||0); });
+  pagosHoy.forEach(p=>{ const m=normMetodo(p.metodo); porMetodo[m]=(porMetodo[m]||0)+(p.monto||0); });
   const porProf = {};
   pagosHoy.forEach(p=>{ const stf=getAllStaff().find(s=>s.id===p.cita.staffId); const n=stf?stf.nombre:'Sin asignar'; porProf[n]=(porProf[n]||0)+(p.monto||0); });
   return {fecha, pagosHoy, egresosHoy, totalIngresos, totalEgresos, neto, porMetodo, porProf};
@@ -5622,7 +5650,7 @@ function abrirCierreCaja() {
             <div style="font-size:11px;color:var(--muted)">${(p.cita.svc||'').substring(0,35)}</div>
           </div>
           <div style="display:flex;align-items:center;gap:8px;margin-left:12px">
-            <span style="font-size:12px">${METODO_ICON[p.metodo||'efectivo']}</span>
+            <span style="font-size:12px">${METODO_ICON[normMetodo(p.metodo)]}</span>
             <span style="font-weight:700;color:var(--mint);white-space:nowrap">${formatCOP(p.monto)}</span>
           </div>
         </div>`;
@@ -5664,7 +5692,7 @@ function enviarCierreCajaWA() {
   msg += `✅ *Neto del día:* ${formatCOP(neto)}\n\n`;
   if(pagosHoy.length>0){
     msg+=`*Ingresos:*\n`;
-    pagosHoy.forEach(p=>{const pac=patients.find(x=>String(x.id)===String(p.cita.pid));const n=pac?pac.nombre+' '+pac.apellido:(p.cita.pnom||'Paciente');msg+=`• ${n} — ${formatCOP(p.monto)} ${METODO_ICON[p.metodo||'efectivo']}\n`;});
+    pagosHoy.forEach(p=>{const pac=patients.find(x=>String(x.id)===String(p.cita.pid));const n=pac?pac.nombre+' '+pac.apellido:(p.cita.pnom||'Paciente');msg+=`• ${n} — ${formatCOP(p.monto)} ${METODO_ICON[normMetodo(p.metodo)]}\n`;});
     msg+='\n';
   }
   if(egresosHoy.length>0){msg+=`*Egresos:*\n`;egresosHoy.forEach(e=>{msg+=`• ${e.concepto} — ${formatCOP(e.monto)}\n`;});msg+='\n';}
