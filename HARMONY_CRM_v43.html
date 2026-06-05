@@ -1057,6 +1057,7 @@
         <div class="page-title">Ingresos y <span>Finanzas</span></div>
         <div style="font-size:13px;color:var(--muted);margin-top:4px">Resumen financiero de la clínica</div>
       </div>
+      <button onclick="openPagoDirectoModal()" style="background:rgba(232,201,122,0.15);color:var(--gold);border:1px solid rgba(232,201,122,0.35);border-radius:10px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">💳 Pago Directo</button>
     </div>
 
     <div class="rev-grid" id="rev-grid"></div>
@@ -1214,6 +1215,111 @@
     </div>
   </div>
 
+  <!-- MODAL: PAGO DIRECTO -->
+  <div class="modal-overlay" id="modal-pago-directo">
+    <div class="modal" style="width:500px;max-height:90vh;overflow-y:auto">
+      <div class="modal-title">
+        <span>💳 Registrar Pago Directo</span>
+        <span class="modal-close" onclick="closeModal('modal-pago-directo')">✕</span>
+      </div>
+
+      <!-- Buscar paciente -->
+      <div class="form-group" style="margin-bottom:16px;position:relative">
+        <label>Paciente *</label>
+        <input type="text" id="pd-pac-search" placeholder="Buscar por nombre o teléfono..."
+          oninput="buscarPacientePD(this.value)" autocomplete="off"
+          style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+        <input type="hidden" id="pd-pac-id" value="">
+        <div id="pd-pac-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:10px;z-index:1000;max-height:200px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.4);margin-top:4px"></div>
+      </div>
+
+      <!-- Servicio -->
+      <div class="form-group" style="margin-bottom:16px">
+        <label>Servicio *</label>
+        <select id="pd-svc" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+          <option value="">— Seleccionar servicio —</option>
+        </select>
+      </div>
+
+      <!-- Profesional -->
+      <div class="form-group" style="margin-bottom:16px">
+        <label>Profesional *</label>
+        <select id="pd-staff" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+          <option value="">— Seleccionar profesional —</option>
+        </select>
+      </div>
+
+      <!-- Fecha -->
+      <div class="form-group" style="margin-bottom:16px">
+        <label>Fecha del pago</label>
+        <input type="date" id="pd-fecha" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+      </div>
+
+      <!-- Monto -->
+      <div class="form-group" style="margin-bottom:16px">
+        <label>Monto total (COP) *</label>
+        <input type="text" id="pd-monto-display" placeholder="$0"
+          oninput="fmtPDMonto(this)"
+          style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--gold);font-size:15px;font-weight:600;font-family:'DM Sans',sans-serif;outline:none">
+        <input type="hidden" id="pd-monto-raw" value="0">
+      </div>
+
+      <!-- Método de pago -->
+      <div class="form-group" style="margin-bottom:16px">
+        <label>Método de pago *</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <button onclick="selMetodoPD('efectivo',this)" id="pdm-efectivo"
+            style="flex:1;min-width:90px;background:rgba(111,207,176,0.18);color:var(--mint);border:1.5px solid var(--mint);border-radius:9px;padding:8px 4px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif" data-active="efectivo">💵 Efectivo</button>
+          <button onclick="selMetodoPD('transferencia',this)" id="pdm-transferencia"
+            style="flex:1;min-width:90px;background:rgba(255,255,255,0.03);color:var(--muted);border:1.5px solid var(--border);border-radius:9px;padding:8px 4px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">🏦 Transferencia</button>
+          <button onclick="selMetodoPD('tarjeta',this)" id="pdm-tarjeta"
+            style="flex:1;min-width:90px;background:rgba(255,255,255,0.03);color:var(--muted);border:1.5px solid var(--border);border-radius:9px;padding:8px 4px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">💳 Tarjeta</button>
+          <button onclick="selMetodoPD('mixto',this)" id="pdm-mixto"
+            style="flex:1;min-width:90px;background:rgba(255,255,255,0.03);color:var(--muted);border:1.5px solid var(--border);border-radius:9px;padding:8px 4px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">🔀 Mixto</button>
+        </div>
+        <input type="hidden" id="pd-metodo" value="efectivo">
+      </div>
+
+      <!-- Campos mixto (ocultos por defecto) -->
+      <div id="pd-mixto-fields" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:12px;font-weight:600">Detalla el monto por cada medio:</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+          <div>
+            <div style="font-size:11px;color:var(--mint);margin-bottom:4px">💵 Efectivo</div>
+            <input type="text" id="pd-mix-ef" placeholder="$0" oninput="fmtPDMixto(this,'pd-mix-ef-raw')"
+              style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+            <input type="hidden" id="pd-mix-ef-raw" value="0">
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--sky);margin-bottom:4px">🏦 Transferencia</div>
+            <input type="text" id="pd-mix-tr" placeholder="$0" oninput="fmtPDMixto(this,'pd-mix-tr-raw')"
+              style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+            <input type="hidden" id="pd-mix-tr-raw" value="0">
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--purple);margin-bottom:4px">💳 Tarjeta</div>
+            <input type="text" id="pd-mix-ta" placeholder="$0" oninput="fmtPDMixto(this,'pd-mix-ta-raw')"
+              style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+            <input type="hidden" id="pd-mix-ta-raw" value="0">
+          </div>
+        </div>
+        <div id="pd-mixto-total-preview" style="margin-top:10px;font-size:12px;color:var(--muted);text-align:right"></div>
+      </div>
+
+      <!-- Nota opcional -->
+      <div class="form-group" style="margin-bottom:20px">
+        <label>Nota (opcional)</label>
+        <input type="text" id="pd-nota" placeholder="Observación o referencia..."
+          style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+      </div>
+
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-outline" onclick="closeModal('modal-pago-directo')" style="flex:1">Cancelar</button>
+        <button onclick="guardarPagoDirecto()" style="flex:2;background:var(--gold);color:var(--bg);border:none;border-radius:10px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">💳 Registrar Pago</button>
+      </div>
+    </div>
+  </div>
+
   <!-- VIEW: REPORTES -->
   <div id="view-reportes" class="view">
     <div class="topbar">
@@ -1283,6 +1389,15 @@
         <span id="rep-nuevos-count" style="font-size:12px;color:var(--mint)"></span>
       </div>
       <div id="rep-nuevos-list"></div>
+    </div>
+
+    <!-- Pagos directos del mes — resumen por método -->
+    <div class="card" style="margin-bottom:24px;padding:22px" id="rep-pd-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div style="font-size:15px;font-weight:600">💳 Pagos Directos del Mes</div>
+        <span style="font-size:11px;color:var(--muted)">Por medio de pago</span>
+      </div>
+      <div id="rep-pd-metodos"></div>
     </div>
 
     <!-- Transacciones del mes -->
@@ -2015,6 +2130,16 @@ function initFirestoreListeners() {
       const cajaView = document.getElementById('view-caja');
       if(cajaView && cajaView.classList.contains('active')) renderCaja();
     }, onError('egresos'))
+  );
+
+  _firestoreUnsubs.push(
+    db.collection('pagos_directos').orderBy('creadoEn','desc').onSnapshot(snap => {
+      calPagosDirectos = snap.docs.map(d => ({...d.data(), _docId: d.id}));
+      const cajaView = document.getElementById('view-caja');
+      if(cajaView && cajaView.classList.contains('active')) renderCaja();
+      renderIngresos && renderIngresos();
+      renderReportes && document.getElementById('view-reportes')?.classList.contains('active') && renderReportes();
+    }, onError('pagos_directos'))
   );
 }
 
@@ -3615,9 +3740,50 @@ function viewPatient(idx) {
         +'<div style="background:var(--border);border-radius:4px;height:6px;margin-bottom:6px"><div style="background:'+(saldo>0?'var(--warn)':'var(--mint)')+';height:100%;width:'+pct+'%;border-radius:4px"></div></div>'
         +'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted)">'
         +'<span>Valor: $'+(c.precio||0).toLocaleString('es-CO')+'</span><span>Cobrado: $'+(c.abono||0).toLocaleString('es-CO')+'</span><span>'+pct+'% pagado</span></div>'
-        +(saldo>0?'<button onclick="registrarAbono('+citaRealIdx+','+idx+')" style="margin-top:8px;background:rgba(255,169,77,0.15);color:var(--warn);border:1px solid rgba(255,169,77,0.3);border-radius:8px;padding:5px 12px;font-size:11px;cursor:pointer">💰 Registrar pago</button>':'')
+        +'<div style="display:flex;gap:8px;margin-top:8px">'
+        +(saldo>0?'<button onclick="registrarAbono('+citaRealIdx+','+idx+')" style="background:rgba(255,169,77,0.15);color:var(--warn);border:1px solid rgba(255,169,77,0.3);border-radius:8px;padding:5px 12px;font-size:11px;cursor:pointer">💰 Registrar pago</button>':'')
+        +'<button onclick="registrarAbono('+citaRealIdx+','+idx+')" style="background:rgba(232,201,122,0.1);color:var(--gold);border:1px solid rgba(232,201,122,0.25);border-radius:8px;padding:5px 12px;font-size:11px;cursor:pointer">✏ Corregir método</button>'
+        +'</div>'
         +'</div>';
     }).join(''));
+
+  // Historial de pagos directos para este paciente
+  var pacDocId = p._docId || String(p.id);
+  var pdPaciente = calPagosDirectos.filter(function(pd){
+    return String(pd.pacienteId) === String(pacDocId) || String(pd.pacienteId) === String(p.id);
+  }).sort(function(a,b){ return b.fecha.localeCompare(a.fecha); });
+
+  var pdHTML = '';
+  if(pdPaciente.length > 0) {
+    var totalPD = pdPaciente.reduce(function(s,pd){ return s+(pd.monto||0); },0);
+    pdHTML = '<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+      +'<div style="font-size:13px;font-weight:600;color:var(--gold)">💳 Pagos Directos ('+pdPaciente.length+')</div>'
+      +'<div style="font-size:13px;font-weight:700;color:var(--mint)">'+formatCOP(totalPD)+'</div>'
+      +'</div>'
+      +pdPaciente.map(function(pd){
+        var metodoIcon = METODO_ICON[normMetodo(pd.metodo)]||'💵';
+        var metodoColor = METODO_COLOR[normMetodo(pd.metodo)]||'var(--mint)';
+        return '<div style="background:rgba(232,201,122,0.05);border:1px solid rgba(232,201,122,0.18);border-radius:10px;padding:10px 12px;margin-bottom:6px">'
+          +'<div style="display:flex;justify-content:space-between;align-items:center">'
+          +'<div style="font-size:12px;font-weight:600">'+(pd.svc||'Servicio')+'</div>'
+          +'<div style="font-size:13px;font-weight:700;color:var(--mint)">'+formatCOP(pd.monto||0)+'</div>'
+          +'</div>'
+          +'<div style="display:flex;gap:8px;align-items:center;margin-top:4px;font-size:11px;color:var(--muted)">'
+          +'<span>📅 '+formatDate(pd.fecha)+'</span>'
+          +'<span>👤 '+(pd.staffNom||'')+'</span>'
+          +'<span style="color:'+metodoColor+'">'+metodoIcon+' '+pd.metodo+'</span>'
+          +(pd.nota?'<span>💬 '+pd.nota+'</span>':'')
+          +'</div>'
+          +'</div>';
+      }).join('')
+      +'</div>';
+  }
+
+  pagosHTML += pdHTML
+    +'<div style="margin-top:14px">'
+    +'<button onclick="openPagoDirectoModal('+idx+')" style="width:100%;background:rgba(232,201,122,0.12);color:var(--gold);border:1px solid rgba(232,201,122,0.3);border-radius:10px;padding:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:\'DM Sans\',sans-serif">💳 Registrar Pago Directo</button>'
+    +'</div>';
 
   var citasHTML = histCitas.length===0
     ? '<div style="color:var(--muted);font-style:italic;text-align:center;padding:20px">Sin citas</div>'
@@ -4904,7 +5070,7 @@ async function migrarAbonoPrevio() {
   var c = calCitas[_abonoCitaIdx];
   var abonado = c.abono || 0;
   var fechaSeleccionada = document.getElementById('abono-fecha')?.value || toLocalDateStr(new Date());
-  var metodo = document.getElementById('abono-metodo')?.value || 'efectivo';
+  var metodo = leerAbonoMetodo();
   if(!confirm('¿Registrar $' + abonado.toLocaleString('es-CO') + ' como pago recibido el ' + fechaSeleccionada + '?\n\nEsto corrige la fecha del anticipo existente.')) return;
   if(!calCitas[_abonoCitaIdx].pagos) calCitas[_abonoCitaIdx].pagos = [];
   calCitas[_abonoCitaIdx].pagos.push({
@@ -4965,7 +5131,7 @@ function confirmarAbono() {
   calCitas[_abonoCitaIdx].pagos.push({
     monto: valor,
     fecha: fechaPago,
-    metodo: String(document.getElementById('abono-metodo')?.value || 'efectivo'),
+    metodo: leerAbonoMetodo(),
     usuario: currentUser ? currentUser.email.split('@')[0] : 'Recepción'
   });
   var p = patients[_abonoPacIdx];
@@ -5383,12 +5549,13 @@ function setRepMesActual() {
 // MÓDULO: CAJA DIARIA
 // ═══════════════════════════════════════════════════════════
 let calEgresos = [];
+let calPagosDirectos = [];
 
 // Listener Firestore para egresos (se agrega en initFirestoreListeners)
 // Ver sección FIRESTORE LISTENERS
 
-const METODO_ICON = { efectivo:'💵', transferencia:'🏦', tarjeta:'💳', desconocido:'❓' };
-const METODO_COLOR = { efectivo:'var(--mint)', transferencia:'var(--sky)', tarjeta:'var(--purple)', desconocido:'var(--warn)' };
+const METODO_ICON = { efectivo:'💵', transferencia:'🏦', tarjeta:'💳', mixto:'🔀', desconocido:'❓' };
+const METODO_COLOR = { efectivo:'var(--mint)', transferencia:'var(--sky)', tarjeta:'var(--purple)', mixto:'var(--gold)', desconocido:'var(--warn)' };
 // Normaliza el método de pago: string explícito o 'desconocido'
 function normMetodo(m) { return (m && typeof m === 'string' && m.trim()) ? m.trim() : 'desconocido'; }
 const EGRESO_CAT_ICON = { insumos:'🧴', domicilio:'🛵', servicios:'🔧', alimentacion:'🍽', otro:'📦' };
@@ -5409,10 +5576,16 @@ function renderCaja() {
     getPagos(c).filter(p => p.fecha === fecha).map(p => ({...p, cita: c}))
   );
 
+  // Pagos directos del día
+  const pdHoy = calPagosDirectos.filter(pd => pd.fecha === fecha);
+
   // Egresos de esta fecha
   const egresosHoy = calEgresos.filter(e => e.fecha === fecha);
 
-  const totalIngresos = pagosHoy.reduce((s,p) => s+(p.monto||0), 0);
+  const totalIngCitas = pagosHoy.reduce((s,p) => s+(p.monto||0), 0);
+  const totalIngPD    = pdHoy.reduce((s,pd) => s+(pd.monto||0), 0);
+  const totalIngresos = totalIngCitas + totalIngPD;
+  const totalPagos    = pagosHoy.length + pdHoy.length;
   const totalEgresos  = egresosHoy.reduce((s,e) => s+(e.monto||0), 0);
   const neto = totalIngresos - totalEgresos;
 
@@ -5421,7 +5594,7 @@ function renderCaja() {
     <div class="kpi-card" style="padding:20px;border-left:3px solid var(--mint)">
       <div class="kpi-label">💰 Ingresos del día</div>
       <div class="kpi-value" style="color:var(--mint);font-size:26px">${formatCOP(totalIngresos)}</div>
-      <div style="font-size:12px;color:var(--muted);margin-top:4px">${pagosHoy.length} pago${pagosHoy.length!==1?'s':''}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">${totalPagos} pago${totalPagos!==1?'s':''}${pdHoy.length>0?' · '+pdHoy.length+' directo'+(pdHoy.length!==1?'s':''):''}</div>
     </div>
     <div class="kpi-card" style="padding:20px;border-left:3px solid var(--alert)">
       <div class="kpi-label">📤 Egresos del día</div>
@@ -5434,9 +5607,10 @@ function renderCaja() {
       <div style="font-size:12px;color:var(--muted);margin-top:4px">${neto>=0?'Cierre positivo':'⚠ Revisar egresos'}</div>
     </div>`;
 
-  // ── Medios de pago ──
+  // ── Medios de pago — citas + directos (mixto desglosado) ──
   const porMetodo = {};
   pagosHoy.forEach(p => { const m=normMetodo(p.metodo); porMetodo[m]=(porMetodo[m]||0)+(p.monto||0); });
+  pdHoy.forEach(pd => getPagoDirectoEntradas(pd).forEach(e => { porMetodo[e.metodo]=(porMetodo[e.metodo]||0)+(e.monto||0); }));
   document.getElementById('caja-medios').innerHTML = totalIngresos===0
     ? '<div style="color:var(--muted);font-size:13px;padding:8px 0">Sin ingresos registrados</div>'
     : Object.entries(porMetodo).map(([m,v]) => {
@@ -5451,21 +5625,42 @@ function renderCaja() {
         </div>`;
       }).join('');
 
-  // ── Lista ingresos ──
-  document.getElementById('caja-ingresos-lista').innerHTML = pagosHoy.length===0
+  // ── Lista ingresos — citas primero, luego pagos directos ──
+  const citasRows = pagosHoy.map(p => {
+    const pac = patients.find(x => String(x.id)===String(p.cita.pid));
+    const nom = pac ? pac.nombre+' '+pac.apellido : (p.cita.pnom||'Paciente');
+    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nom}</div>
+        <div style="font-size:11px;color:var(--muted)">${(p.cita.svc||'').substring(0,30)}</div>
+      </div>
+      <div style="font-size:12px;color:${METODO_COLOR[normMetodo(p.metodo)]}">${METODO_ICON[normMetodo(p.metodo)]}</div>
+      <div style="font-size:14px;font-weight:700;color:var(--mint);white-space:nowrap">${formatCOP(p.monto)}</div>
+    </div>`;
+  });
+  const pdRows = pdHoy.map(pd => {
+    const metodoBadge = pd.metodo==='mixto'
+      ? `<span style="font-size:10px;background:rgba(232,201,122,0.15);color:var(--gold);border-radius:4px;padding:2px 6px">🔀 Mixto</span>`
+      : `<span style="font-size:12px;color:${METODO_COLOR[normMetodo(pd.metodo)]}">${METODO_ICON[normMetodo(pd.metodo)]}</span>`;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:6px">
+          <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${pd.pacienteNom||'Paciente'}</div>
+          <span style="font-size:10px;background:rgba(232,201,122,0.12);color:var(--gold);border-radius:4px;padding:1px 6px;flex-shrink:0">💳 Directo</span>
+        </div>
+        <div style="font-size:11px;color:var(--muted)">${(pd.svc||'').substring(0,30)} · ${pd.staffNom||''}</div>
+      </div>
+      ${metodoBadge}
+      <div style="display:flex;align-items:center;gap:6px">
+        <div style="font-size:14px;font-weight:700;color:var(--mint);white-space:nowrap">${formatCOP(pd.monto)}</div>
+        ${isAdmin?`<button onclick="eliminarPagoDirecto('${pd._docId}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px;margin-left:2px" title="Eliminar">✕</button>`:''}
+      </div>
+    </div>`;
+  });
+  const todosRows = [...citasRows, ...pdRows];
+  document.getElementById('caja-ingresos-lista').innerHTML = todosRows.length===0
     ? '<div style="color:var(--muted);font-size:13px;font-style:italic;padding:12px 0">Sin ingresos en esta fecha</div>'
-    : pagosHoy.map(p => {
-        const pac = patients.find(x => String(x.id)===String(p.cita.pid));
-        const nom = pac ? pac.nombre+' '+pac.apellido : (p.cita.pnom||'Paciente');
-        return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
-          <div style="flex:1;min-width:0">
-            <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nom}</div>
-            <div style="font-size:11px;color:var(--muted)">${(p.cita.svc||'').substring(0,30)}</div>
-          </div>
-          <div style="font-size:12px;color:${METODO_COLOR[normMetodo(p.metodo)]}">${METODO_ICON[normMetodo(p.metodo)]}</div>
-          <div style="font-size:14px;font-weight:700;color:var(--mint);white-space:nowrap">${formatCOP(p.monto)}</div>
-        </div>`;
-      }).join('');
+    : todosRows.join('');
 
   // ── Lista egresos ──
   document.getElementById('caja-egresos-lista').innerHTML = egresosHoy.length===0
@@ -5481,13 +5676,19 @@ function renderCaja() {
           <div style="font-size:14px;font-weight:700;color:var(--alert);white-space:nowrap">-${formatCOP(e.monto)}</div>
         </div>`).join('');
 
-  // ── Por profesional ──
+  // ── Por profesional — incluye pagos directos ──
   const porProf = {};
   pagosHoy.forEach(p => {
     const stf = getAllStaff().find(s => s.id===p.cita.staffId);
     const nom = stf ? stf.nombre : 'Sin asignar';
     if(!porProf[nom]) porProf[nom]={total:0,count:0};
     porProf[nom].total += (p.monto||0);
+    porProf[nom].count++;
+  });
+  pdHoy.forEach(pd => {
+    const nom = pd.staffNom || 'Sin asignar';
+    if(!porProf[nom]) porProf[nom]={total:0,count:0};
+    porProf[nom].total += (pd.monto||0);
     porProf[nom].count++;
   });
   document.getElementById('caja-profesionales').innerHTML = Object.keys(porProf).length===0
@@ -5542,12 +5743,34 @@ function selCitaMetodo(m, btn) {
 }
 
 function selAbonoMetodo(m, btn) {
+  // Guardar en data-attribute del botón activo Y en el hidden input
   document.getElementById('abono-metodo').value = m;
   ['efectivo','transferencia','tarjeta'].forEach(x => {
     const b = document.getElementById('abm-'+x);
-    if(b){ b.style.background='rgba(255,255,255,0.03)'; b.style.color='var(--muted)'; b.style.borderColor='var(--border)'; }
+    if(b){
+      b.style.background='rgba(255,255,255,0.03)';
+      b.style.color='var(--muted)';
+      b.style.borderColor='var(--border)';
+      b.removeAttribute('data-active');
+    }
   });
-  if(btn){ btn.style.background=METODO_COLOR[m]+'33'; btn.style.color=METODO_COLOR[m]; btn.style.borderColor=METODO_COLOR[m]; }
+  if(btn){
+    btn.style.background=METODO_COLOR[m]+'33';
+    btn.style.color=METODO_COLOR[m];
+    btn.style.borderColor=METODO_COLOR[m];
+    btn.setAttribute('data-active', m);
+  }
+}
+
+// Leer método activo desde data-attribute del botón (más robusto que el hidden input)
+function leerAbonoMetodo() {
+  for(const x of ['efectivo','transferencia','tarjeta']) {
+    const b = document.getElementById('abm-'+x);
+    if(b && b.getAttribute('data-active')) return x;
+  }
+  // Fallback al hidden input
+  const val = document.getElementById('abono-metodo')?.value;
+  return (val && val !== 'undefined') ? val : 'efectivo';
 }
 
 async function guardarEgreso() {
@@ -5580,19 +5803,243 @@ async function eliminarEgreso(docId) {
   } catch(e){ showToast('❌ Error: '+e.message,'🚫'); }
 }
 
+// ═══════════════════════════════════════════════════════════
+// MÓDULO: PAGO DIRECTO
+// ═══════════════════════════════════════════════════════════
+
+function openPagoDirectoModal(pacIdx) {
+  // Reset form
+  document.getElementById('pd-pac-search').value = '';
+  document.getElementById('pd-pac-id').value = '';
+  document.getElementById('pd-pac-results').style.display = 'none';
+  document.getElementById('pd-monto-display').value = '';
+  document.getElementById('pd-monto-raw').value = '0';
+  document.getElementById('pd-nota').value = '';
+  document.getElementById('pd-mix-ef').value = '';
+  document.getElementById('pd-mix-ef-raw').value = '0';
+  document.getElementById('pd-mix-tr').value = '';
+  document.getElementById('pd-mix-tr-raw').value = '0';
+  document.getElementById('pd-mix-ta').value = '';
+  document.getElementById('pd-mix-ta-raw').value = '0';
+  document.getElementById('pd-mixto-fields').style.display = 'none';
+
+  // Fecha por defecto: hoy
+  document.getElementById('pd-fecha').value = toLocalDateStr(new Date());
+
+  // Poblar servicios
+  const svcSel = document.getElementById('pd-svc');
+  svcSel.innerHTML = '<option value="">— Seleccionar servicio —</option>'
+    + SERVICES_CATALOG.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+
+  // Poblar profesionales
+  const staffSel = document.getElementById('pd-staff');
+  staffSel.innerHTML = '<option value="">— Seleccionar profesional —</option>'
+    + getAllStaff().map(s => `<option value="${s.id}">${s.nombre}</option>`).join('');
+
+  // Seleccionar método efectivo por defecto
+  selMetodoPD('efectivo', document.getElementById('pdm-efectivo'));
+
+  // Pre-seleccionar paciente si viene de la ficha
+  if(pacIdx !== undefined && patients[pacIdx]) {
+    const p = patients[pacIdx];
+    document.getElementById('pd-pac-search').value = p.nombre + ' ' + p.apellido;
+    document.getElementById('pd-pac-id').value = p._docId || String(p.id);
+  }
+
+  document.getElementById('modal-pago-directo').classList.add('open');
+  setTimeout(() => {
+    if(!document.getElementById('pd-pac-id').value)
+      document.getElementById('pd-pac-search').focus();
+    else
+      document.getElementById('pd-monto-display').focus();
+  }, 200);
+}
+
+function buscarPacientePD(val) {
+  const dd = document.getElementById('pd-pac-results');
+  if(!val.trim()) { dd.style.display = 'none'; document.getElementById('pd-pac-id').value = ''; return; }
+  const q = val.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  const coinciden = patients.filter(p => {
+    const nom = (p.nombre+' '+p.apellido).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+    return nom.includes(q) || (p.telefono||'').includes(val);
+  }).slice(0, 8);
+  if(!coinciden.length) {
+    dd.innerHTML = '<div style="padding:12px 16px;font-size:13px;color:var(--muted)">No se encontró ningún paciente</div>';
+    dd.style.display = 'block'; return;
+  }
+  dd.innerHTML = coinciden.map(p => `
+    <div onclick="selPacientePD('${p._docId||p.id}','${(p.nombre+' '+p.apellido).replace(/'/g,"\\'")}',this)"
+      style="padding:12px 16px;cursor:pointer;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border)"
+      onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+      <div style="width:32px;height:32px;border-radius:50%;background:${avatarColor(p)};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">${initials(p)}</div>
+      <div>
+        <div style="font-size:13px;font-weight:600">${p.nombre} ${p.apellido}</div>
+        <div style="font-size:11px;color:var(--muted)">${p.telefono||''}</div>
+      </div>
+    </div>`).join('');
+  dd.style.display = 'block';
+}
+
+function selPacientePD(pid, nom) {
+  document.getElementById('pd-pac-id').value = pid;
+  document.getElementById('pd-pac-search').value = nom;
+  document.getElementById('pd-pac-results').style.display = 'none';
+}
+
+function selMetodoPD(m, btn) {
+  document.getElementById('pd-metodo').value = m;
+  ['efectivo','transferencia','tarjeta','mixto'].forEach(x => {
+    const b = document.getElementById('pdm-'+x);
+    if(b) {
+      b.style.background = 'rgba(255,255,255,0.03)';
+      b.style.color = 'var(--muted)';
+      b.style.borderColor = 'var(--border)';
+      b.removeAttribute('data-active');
+    }
+  });
+  if(btn) {
+    btn.style.background = (METODO_COLOR[m]||'var(--gold)') + '28';
+    btn.style.color = METODO_COLOR[m] || 'var(--gold)';
+    btn.style.borderColor = METODO_COLOR[m] || 'var(--gold)';
+    btn.setAttribute('data-active', m);
+  }
+  // Mostrar/ocultar campos mixto
+  document.getElementById('pd-mixto-fields').style.display = m === 'mixto' ? 'block' : 'none';
+}
+
+function fmtPDMonto(el) {
+  const raw = el.value.replace(/[^0-9]/g,'');
+  document.getElementById('pd-monto-raw').value = raw || '0';
+  el.value = raw ? '$'+Number(raw).toLocaleString('es-CO') : '';
+}
+
+function fmtPDMixto(el, rawId) {
+  const raw = el.value.replace(/[^0-9]/g,'');
+  document.getElementById(rawId).value = raw || '0';
+  el.value = raw ? '$'+Number(raw).toLocaleString('es-CO') : '';
+  // Actualizar preview de suma
+  const ef = parseFloat(document.getElementById('pd-mix-ef-raw').value)||0;
+  const tr = parseFloat(document.getElementById('pd-mix-tr-raw').value)||0;
+  const ta = parseFloat(document.getElementById('pd-mix-ta-raw').value)||0;
+  const sum = ef+tr+ta;
+  const prev = document.getElementById('pd-mixto-total-preview');
+  if(prev) prev.textContent = sum > 0 ? 'Suma: ' + formatCOP(sum) : '';
+}
+
+async function guardarPagoDirecto() {
+  const pacId  = document.getElementById('pd-pac-id').value.trim();
+  const pacNom = document.getElementById('pd-pac-search').value.trim();
+  const svc    = document.getElementById('pd-svc').value;
+  const staffId= document.getElementById('pd-staff').value;
+  const fecha  = document.getElementById('pd-fecha').value || toLocalDateStr(new Date());
+  const metodo = document.getElementById('pd-metodo').value || 'efectivo';
+  let monto    = parseFloat(document.getElementById('pd-monto-raw').value)||0;
+  const nota   = document.getElementById('pd-nota').value.trim();
+
+  if(!pacNom) { showToast('Selecciona un paciente','⚠'); return; }
+  if(!svc)    { showToast('Selecciona un servicio','⚠'); return; }
+  if(!staffId){ showToast('Selecciona un profesional','⚠'); return; }
+
+  // Datos mixto
+  let montoEfectivo = 0, montoTransferencia = 0, montoTarjeta = 0;
+  if(metodo === 'mixto') {
+    montoEfectivo     = parseFloat(document.getElementById('pd-mix-ef-raw').value)||0;
+    montoTransferencia= parseFloat(document.getElementById('pd-mix-tr-raw').value)||0;
+    montoTarjeta      = parseFloat(document.getElementById('pd-mix-ta-raw').value)||0;
+    monto = montoEfectivo + montoTransferencia + montoTarjeta;
+    if(monto <= 0) { showToast('Ingresa los montos del pago mixto','⚠'); return; }
+  } else {
+    if(monto <= 0) { showToast('El monto debe ser mayor a $0','⚠'); return; }
+  }
+
+  const stf = getAllStaff().find(s => s.id === staffId);
+  const staffNom = stf ? stf.nombre : staffId;
+
+  const pd = {
+    pacienteId: pacId,
+    pacienteNom: pacNom,
+    svc, staffId, staffNom,
+    fecha, monto, metodo, nota,
+    montoEfectivo:   metodo==='mixto' ? montoEfectivo    : (metodo==='efectivo'    ? monto : 0),
+    montoTransferencia: metodo==='mixto' ? montoTransferencia : (metodo==='transferencia' ? monto : 0),
+    montoTarjeta:    metodo==='mixto' ? montoTarjeta     : (metodo==='tarjeta'     ? monto : 0),
+    usuario: currentUser ? currentUser.email.split('@')[0] : 'Recepción',
+    creadoEn: new Date().toISOString()
+  };
+
+  try {
+    await fsConReintento(() => db.collection('pagos_directos').add(pd));
+
+    // Auditoría
+    try {
+      await db.collection('auditoria').add({
+        accion: 'pago_directo',
+        pacienteNom: pacNom,
+        pacienteId: pacId,
+        svc, staffNom,
+        monto, metodo, fecha,
+        usuario: currentUser ? currentUser.email : 'Recepción',
+        timestamp: new Date().toISOString()
+      });
+    } catch(e) { console.warn('auditoria:', e.message); }
+
+    showToast('💳 Pago directo registrado — '+formatCOP(monto),'✅');
+    closeModal('modal-pago-directo');
+    renderCaja && renderCaja();
+    renderIngresos && renderIngresos();
+  } catch(e) { showToast('❌ Error al guardar: '+e.message,'🚫'); }
+}
+
+async function eliminarPagoDirecto(docId) {
+  if(!isAdmin) { showToast('Solo admins pueden eliminar pagos','🚫'); return; }
+  if(!confirm('¿Eliminar este pago directo? Esta acción no se puede deshacer.')) return;
+  try {
+    await fsConReintento(() => db.collection('pagos_directos').doc(docId).delete());
+    showToast('✅ Pago eliminado','🧹');
+    renderCaja && renderCaja();
+  } catch(e){ showToast('❌ Error: '+e.message,'🚫'); }
+}
+
+// Expande un pago directo en sub-pagos por método (para Caja medios de pago)
+function getPagoDirectoEntradas(pd) {
+  if(pd.metodo !== 'mixto') {
+    return [{ monto: pd.monto, metodo: normMetodo(pd.metodo), _pd: pd }];
+  }
+  const out = [];
+  if((pd.montoEfectivo||0) > 0)      out.push({ monto: pd.montoEfectivo,      metodo: 'efectivo',      _pd: pd });
+  if((pd.montoTransferencia||0) > 0) out.push({ monto: pd.montoTransferencia, metodo: 'transferencia', _pd: pd });
+  if((pd.montoTarjeta||0) > 0)       out.push({ monto: pd.montoTarjeta,       metodo: 'tarjeta',       _pd: pd });
+  if(!out.length) out.push({ monto: pd.monto, metodo: 'mixto', _pd: pd });
+  return out;
+}
+
 function _getCierreDatos() {
   const fecha = document.getElementById('caja-fecha')?.value || toLocalDateStr(new Date());
   const citasActivas = calCitas.filter(c => (c.precio||0)>0 && c.estado!=='no_vino' && c.estado!=='cancelada');
   const pagosHoy = citasActivas.flatMap(c => getPagos(c).filter(p=>p.fecha===fecha).map(p=>({...p,cita:c})));
+
+  // Incluir pagos directos del día
+  const pdHoy = calPagosDirectos.filter(pd => pd.fecha === fecha);
+
   const egresosHoy = calEgresos.filter(e => e.fecha === fecha);
-  const totalIngresos = pagosHoy.reduce((s,p)=>s+(p.monto||0),0);
+
+  const totalIngCitas = pagosHoy.reduce((s,p)=>s+(p.monto||0),0);
+  const totalIngPD    = pdHoy.reduce((s,pd)=>s+(pd.monto||0),0);
+  const totalIngresos = totalIngCitas + totalIngPD;
   const totalEgresos  = egresosHoy.reduce((s,e)=>s+(e.monto||0),0);
   const neto = totalIngresos - totalEgresos;
+
+  // Por método — citas + pagos directos (mixto se desglosa)
   const porMetodo = {};
   pagosHoy.forEach(p=>{ const m=normMetodo(p.metodo); porMetodo[m]=(porMetodo[m]||0)+(p.monto||0); });
+  pdHoy.forEach(pd => getPagoDirectoEntradas(pd).forEach(e => { porMetodo[e.metodo]=(porMetodo[e.metodo]||0)+(e.monto||0); }));
+
+  // Por profesional
   const porProf = {};
   pagosHoy.forEach(p=>{ const stf=getAllStaff().find(s=>s.id===p.cita.staffId); const n=stf?stf.nombre:'Sin asignar'; porProf[n]=(porProf[n]||0)+(p.monto||0); });
-  return {fecha, pagosHoy, egresosHoy, totalIngresos, totalEgresos, neto, porMetodo, porProf};
+  pdHoy.forEach(pd=>{ const n=pd.staffNom||'Sin asignar'; porProf[n]=(porProf[n]||0)+(pd.monto||0); });
+
+  return {fecha, pagosHoy, pdHoy, egresosHoy, totalIngresos, totalEgresos, neto, porMetodo, porProf};
 }
 
 function abrirCierreCaja() {
@@ -5639,9 +6086,9 @@ function abrirCierreCaja() {
       </div>`).join('')}`:''}
 
     <!-- Ingresos detalle -->
-    <div style="${secTitle}">💰 Detalle de ingresos (${pagosHoy.length})</div>
-    ${pagosHoy.length===0?'<div style="color:var(--muted);font-size:13px;font-style:italic">Sin ingresos</div>':
-      pagosHoy.map(p=>{
+    <div style="${secTitle}">💰 Detalle de ingresos (${pagosHoy.length + pdHoy.length})</div>
+    ${(pagosHoy.length+pdHoy.length)===0?'<div style="color:var(--muted);font-size:13px;font-style:italic">Sin ingresos</div>':''}
+    ${pagosHoy.map(p=>{
         const pac=patients.find(x=>String(x.id)===String(p.cita.pid));
         const nom=pac?pac.nombre+' '+pac.apellido:(p.cita.pnom||'Paciente');
         return `<div style="${rowStyle}">
@@ -5655,6 +6102,16 @@ function abrirCierreCaja() {
           </div>
         </div>`;
       }).join('')}
+    ${pdHoy.map(pd=>`<div style="${rowStyle}">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:13px">${pd.pacienteNom||'Paciente'} <span style="font-size:10px;color:var(--gold);font-weight:400">💳 Directo</span></div>
+          <div style="font-size:11px;color:var(--muted)">${(pd.svc||'').substring(0,30)} · ${pd.staffNom||''}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-left:12px">
+          <span style="font-size:12px">${METODO_ICON[normMetodo(pd.metodo)]}</span>
+          <span style="font-weight:700;color:var(--mint);white-space:nowrap">${formatCOP(pd.monto)}</span>
+        </div>
+      </div>`).join('')}
 
     <!-- Egresos detalle -->
     <div style="${secTitle}">📤 Detalle de egresos (${egresosHoy.length})</div>
@@ -5684,15 +6141,16 @@ function abrirCierreCaja() {
 }
 
 function enviarCierreCajaWA() {
-  const {fecha, pagosHoy, egresosHoy, totalIngresos, totalEgresos, neto, porMetodo} = _getCierreDatos();
+  const {fecha, pagosHoy, pdHoy, egresosHoy, totalIngresos, totalEgresos, neto, porMetodo} = _getCierreDatos();
   const fechaLegible = new Date(fecha+'T12:00:00').toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   let msg = `📊 *CIERRE DE CAJA*\n*Harmony Skin Tech*\n${fechaLegible.toUpperCase()}\n\n`;
   msg += `💰 *Ingresos:* ${formatCOP(totalIngresos)}\n`;
   msg += `📤 *Egresos:* ${formatCOP(totalEgresos)}\n`;
   msg += `✅ *Neto del día:* ${formatCOP(neto)}\n\n`;
-  if(pagosHoy.length>0){
+  if(pagosHoy.length+pdHoy.length>0){
     msg+=`*Ingresos:*\n`;
     pagosHoy.forEach(p=>{const pac=patients.find(x=>String(x.id)===String(p.cita.pid));const n=pac?pac.nombre+' '+pac.apellido:(p.cita.pnom||'Paciente');msg+=`• ${n} — ${formatCOP(p.monto)} ${METODO_ICON[normMetodo(p.metodo)]}\n`;});
+    pdHoy.forEach(pd=>{msg+=`• ${pd.pacienteNom||'Paciente'} — ${formatCOP(pd.monto)} ${METODO_ICON[normMetodo(pd.metodo)]} 💳 Directo\n`;});
     msg+='\n';
   }
   if(egresosHoy.length>0){msg+=`*Egresos:*\n`;egresosHoy.forEach(e=>{msg+=`• ${e.concepto} — ${formatCOP(e.monto)}\n`;});msg+='\n';}
@@ -5755,22 +6213,38 @@ function renderReportes() {
     return true;
   });
 
+  // Filtrar pagos directos del mes
+  const pdMes = calPagosDirectos.filter(pd => {
+    if(!pd.fecha) return false;
+    const d = new Date(pd.fecha);
+    if(!(d.getMonth()+1 === mes && d.getFullYear() === anio)) return false;
+    if(staffFiltro !== 'all' && pd.staffId !== staffFiltro) return false;
+    return true;
+  });
+
   // Filtrar pacientes nuevos del mes (por fecha de registro)
   const pacientesMes = patients.filter(p => {
     const d = new Date(p.fecha);
     return d.getMonth()+1 === mes && d.getFullYear() === anio;
   });
 
-  const totalIngresos = citasMes.reduce((s,c) => s+(c.precio||0), 0);
-  const totalAbonado  = citasMes.reduce((s,c) => s+(c.abono||0), 0);
-  const totalPendiente = citasMes.reduce((s,c) => s+Math.max(0,(c.precio||0)-(c.abono||0)), 0);
+  const totalIngresosCitas = citasMes.reduce((s,c) => s+(c.precio||0), 0);
+  const totalIngresosPD    = pdMes.reduce((s,pd) => s+(pd.monto||0), 0);
+  const totalIngresos      = totalIngresosCitas + totalIngresosPD;
+  const totalAbonado       = citasMes.reduce((s,c) => s+(c.abono||0), 0);
+  const totalPendiente     = citasMes.reduce((s,c) => s+Math.max(0,(c.precio||0)-(c.abono||0)), 0);
+
+  // Resumen por método de pago del mes (pagos directos)
+  const porMetodoMes = {};
+  pdMes.forEach(pd => getPagoDirectoEntradas(pd).forEach(e => { porMetodoMes[e.metodo]=(porMetodoMes[e.metodo]||0)+(e.monto||0); }));
+  const hayMetodos = Object.keys(porMetodoMes).length > 0;
 
   // ── KPIs ──────────────────────────────────────────────────
   document.getElementById('rep-kpis').innerHTML = `
     <div class="kpi-card k3" style="padding:22px">
       <div class="kpi-label">Ingresos del Mes</div>
       <div class="kpi-value" style="font-size:${totalIngresos>=10000000?'20px':'26px'}">${formatCOP(totalIngresos)}</div>
-      <div class="kpi-sub">${citasMes.length} servicio${citasMes.length!==1?'s':''} realizados</div>
+      <div class="kpi-sub">${citasMes.length} servicio${citasMes.length!==1?'s':''}${pdMes.length>0?' + '+pdMes.length+' directo'+(pdMes.length!==1?'s':''):''}</div>
     </div>
     <div class="kpi-card k1" style="padding:22px">
       <div class="kpi-label">Pacientes Nuevos</div>
@@ -5780,7 +6254,7 @@ function renderReportes() {
     <div class="kpi-card k4" style="padding:22px">
       <div class="kpi-label">Total Abonado</div>
       <div class="kpi-value" style="font-size:${totalAbonado>=10000000?'20px':'26px'};color:var(--mint)">${formatCOP(totalAbonado)}</div>
-      <div class="kpi-sub">Pagos recibidos</div>
+      <div class="kpi-sub">Pagos recibidos en citas</div>
     </div>
     <div class="kpi-card k2" style="padding:22px">
       <div class="kpi-label">Saldo Pendiente</div>
@@ -5788,6 +6262,34 @@ function renderReportes() {
       <div class="kpi-sub">${totalPendiente>0?'Por cobrar':'Todo pagado ✓'}</div>
     </div>
   `;
+
+  // ── Resumen Pagos Directos por método ─────────────────────
+  const repPDEl = document.getElementById('rep-pd-metodos');
+  if(repPDEl) {
+    if(!hayMetodos && pdMes.length === 0) {
+      repPDEl.closest('.card').style.display = 'none';
+    } else {
+      repPDEl.closest('.card').style.display = '';
+      const maxPD = Math.max(...Object.values(porMetodoMes), 1);
+      repPDEl.innerHTML = Object.keys(porMetodoMes).length===0
+        ? `<div style="font-size:13px;color:var(--muted);text-align:center;padding:16px">Sin pagos directos en este período</div>`
+        : Object.entries(porMetodoMes).map(([m,v]) => {
+            const pct = Math.round((v/totalIngresosPD)*100);
+            return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+              <div style="width:110px;font-size:13px;font-weight:600;color:${METODO_COLOR[m]||'var(--text)'}">${METODO_ICON[m]||'💵'} ${m.charAt(0).toUpperCase()+m.slice(1)}</div>
+              <div style="flex:1;background:var(--surface2);border-radius:4px;height:8px">
+                <div style="width:${pct}%;height:100%;background:${METODO_COLOR[m]||'var(--mint)'};border-radius:4px;transition:width 0.4s"></div>
+              </div>
+              <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap">${formatCOP(v)}</div>
+              <div style="font-size:11px;color:var(--muted);width:32px;text-align:right">${pct}%</div>
+            </div>`;
+          }).join('')
+        + `<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;display:flex;justify-content:space-between;font-size:13px;font-weight:600">
+            <span style="color:var(--muted)">${pdMes.length} pago${pdMes.length!==1?'s':''} directos</span>
+            <span style="color:var(--gold)">${formatCOP(totalIngresosPD)}</span>
+          </div>`;
+    }
+  }
 
   // ── Ingresos por Profesional del mes ──────────────────────
   document.getElementById('rep-prof-periodo').textContent = label;
