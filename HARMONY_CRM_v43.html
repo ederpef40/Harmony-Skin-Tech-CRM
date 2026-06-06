@@ -6043,7 +6043,7 @@ function _getCierreDatos() {
 }
 
 function abrirCierreCaja() {
-  const {fecha, pagosHoy, egresosHoy, totalIngresos, totalEgresos, neto, porMetodo, porProf} = _getCierreDatos();
+  const {fecha, pagosHoy, pdHoy, egresosHoy, totalIngresos, totalEgresos, neto, porMetodo, porProf} = _getCierreDatos();
   const fechaLegible = new Date(fecha+'T12:00:00').toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   const hora = new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
   const usuario = currentUser ? currentUser.email.split('@')[0] : 'usuario';
