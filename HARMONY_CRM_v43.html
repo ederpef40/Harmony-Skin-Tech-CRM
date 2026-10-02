@@ -4385,6 +4385,12 @@ function openNewCita(f,t,sid){
 function openEditCita(idx){
   var c=calCitas[idx];
   if(c.estado==='realizada'||c.estado==='cancelada'||c.estado==='reagendada'||c.estado==='no_vino'){
+    if(isAdmin && c.estado==='realizada'){
+      if(confirm('🔒 Esta cita fue marcada como completada.\n\n¿Deseas revertirla a "Agendada"?\n\nSe corregirá también el registro del paciente.')){
+        revertirCitaRealizada(idx);
+      }
+      return;
+    }
     const msgs={realizada:'🔒 Cita completada — solo lectura',cancelada:'🚫 Cita cancelada — solo lectura',reagendada:'🔵 Cita reagendada — solo lectura',no_vino:'🚫 Paciente no vino — solo lectura'};
     showToast(msgs[c.estado]||'Solo lectura','🔒');
     return;
@@ -4417,6 +4423,41 @@ function openEditCita(idx){
   document.getElementById('btn-del-cita').style.display='inline-flex';
   setCitaEstado(c.estado||'agendada');
   document.getElementById('modal-cita').classList.add('open');
+}
+
+async function revertirCitaRealizada(idx) {
+  var cita = calCitas[idx];
+  if(!cita || cita.estado !== 'realizada') return;
+  try {
+    await db.collection('citas').doc(cita._docId).update({ estado: 'agendada' });
+    cita.estado = 'agendada';
+    calCitas[idx] = cita;
+    var pIdx = patients.findIndex(function(x){ return String(x.id)===String(cita.pid)||String(x._docId)===String(cita.pid); });
+    if(pIdx >= 0) {
+      var p = patients[pIdx];
+      var otrasRealizadas = calCitas
+        .filter(function(c2, i){ return i!==idx && c2.estado==='realizada' && (String(c2.pid)===String(cita.pid)||String(c2.pid)===String(p._docId)); })
+        .sort(function(a,b){ return (b.fecha||'').localeCompare(a.fecha||''); });
+      if(otrasRealizadas.length > 0) {
+        var prev = otrasRealizadas[0];
+        p.fecha = prev.fecha;
+        p.meses = prev.mesesRetorno || SERVICE_INTERVALS[prev.svc] || p.meses || 6;
+        p.servicio = prev.svc || p.servicio;
+      }
+      if(p.notasHistorial && p.notasHistorial.length > 0) {
+        var last = p.notasHistorial[p.notasHistorial.length - 1];
+        if(last.texto && last.texto.startsWith('Servicio realizado: '+(cita.svc||''))) p.notasHistorial.pop();
+      }
+      p.msgStatus = null;
+      patients[pIdx] = p;
+      savePatientFS(p);
+    }
+    renderCalendar();
+    auditLog('Cita revertida a agendada', (cita.pnom||'') + ' ' + (cita.fecha||'') + ' ' + (cita.hi||''));
+    showToast('✅ Cita revertida a "Agendada"', '🔄');
+  } catch(e) {
+    showToast('Error al revertir: ' + e.message, '❌');
+  }
 }
 
 function saveCita(){
