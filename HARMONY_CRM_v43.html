@@ -5285,9 +5285,10 @@ function exportAgendaDia() {
   var staff = getAllStaff();
   var estadoLabel = {agendada:'🟡 Agendada', realizada:'🟢 Realizada', cancelada:'🔴 Cancelada', reagendada:'🔵 Reagendada'};
 
-  // Calcular el día siguiente
+  // Calcular el día siguiente (si hoy es sábado, el siguiente día hábil es el lunes)
   var manana = new Date();
-  manana.setDate(manana.getDate() + 1);
+  var diasSumar = (manana.getDay() === 6) ? 2 : 1;
+  manana.setDate(manana.getDate() + diasSumar);
   var fechaManana = toLocalDateStr(manana);
   var labelManana = manana.toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   labelManana = labelManana.charAt(0).toUpperCase() + labelManana.slice(1);
