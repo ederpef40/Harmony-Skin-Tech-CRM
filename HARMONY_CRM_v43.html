@@ -761,6 +761,7 @@
         <button class="btn btn-outline" id="cal-prev-btn" onclick="calPrev()">← Anterior</button>
         <button class="btn btn-outline" onclick="calToday()">Hoy</button>
         <button class="btn btn-outline" id="cal-next-btn" onclick="calNext()">Siguiente →</button>
+        <button class="btn btn-outline" onclick="exportAgendaHoy()" title="Imprimir agenda de hoy">🖨️ Imprimir Hoy</button>
         <button class="btn btn-outline" onclick="exportAgendaDia()" title="Imprimir agenda del día siguiente">🖨️ Imprimir Día Siguiente</button>
         <button class="btn btn-outline" onclick="openBloquearAgenda()" style="color:var(--alert);border-color:rgba(255,107,107,0.4)" title="Bloquear agenda de un profesional">🔒 Bloquear</button>
         <button class="btn btn-primary" onclick="openAddStaff()">+ Profesional</button>
@@ -5281,6 +5282,84 @@ document.addEventListener('click', function(e){
 // ═══════════════════════════════════════════════════════════
 // MEJORA 2: EXPORTAR AGENDA DEL DÍA A PDF
 // ═══════════════════════════════════════════════════════════
+function exportAgendaHoy() {
+  var staff = getAllStaff();
+  var estadoLabel = {agendada:'🟡 Agendada', realizada:'🟢 Realizada', cancelada:'🔴 Cancelada', reagendada:'🔵 Reagendada'};
+
+  var hoy = new Date();
+  var fechaHoy = toLocalDateStr(hoy);
+  var labelHoy = hoy.toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  labelHoy = labelHoy.charAt(0).toUpperCase() + labelHoy.slice(1);
+
+  var citasDia = calCitas
+    .filter(function(c){ return c.fecha === fechaHoy && c.estado !== 'cancelada'; })
+    .sort(function(a,b){ return (a.hi||'').localeCompare(b.hi||''); });
+
+  var rows = citasDia.map(function(c){
+    var s = staff.find(function(x){return x.id===c.staffId;});
+    var p = patients.find(function(x){return String(x.id)===String(c.pid)||String(x._docId)===String(c.pid);});
+    var nom = p ? p.nombre+' '+p.apellido : (c.pnom||'Paciente');
+    var tel = p ? p.telefono : '';
+    return '<tr>'
+      +'<td style="white-space:nowrap;font-weight:600;color:#c4a35a">'+c.hi+(c.hf?' → '+c.hf:'')+'</td>'
+      +'<td><b>'+nom+'</b>'+(tel?'<br><span style="font-size:11px;color:#888">'+tel+'</span>':'')+'</td>'
+      +'<td>'+(s?'<span style="background:'+s.color+'22;color:'+s.color+';padding:2px 8px;border-radius:4px;font-size:12px">'+s.nombre+'</span>':'—')+'</td>'
+      +'<td>'+(c.svc||'—')+'</td>'
+      +'<td style="white-space:nowrap">'+(c.precio?'$'+Number(c.precio).toLocaleString('es-CO'):'—')+'</td>'
+      +'<td>'+(estadoLabel[c.estado||'agendada']||'🟡')+'</td>'
+      +'<td style="color:#888;font-size:12px">'+(c.notas||'')+'</td>'
+      +'</tr>';
+  }).join('');
+
+  var totalDia = citasDia.filter(function(c){return c.estado==='realizada';}).reduce(function(s,c){return s+(c.precio||0);},0);
+  var pendientesDia = citasDia.filter(function(c){return c.estado==='agendada'||!c.estado;}).length;
+
+  var seccionHTML = '<div class="dia-section">'
+    +'<div style="background:#f5f0e8;color:#1a1828;padding:10px 16px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center">'
+    +'<span style="font-weight:700;font-size:15px">📅 '+labelHoy+'</span>'
+    +'<span style="font-size:12px;opacity:0.8">'+citasDia.length+' cita'+(citasDia.length!==1?'s':'')+' · '+pendientesDia+' pendiente'+(pendientesDia!==1?'s':'')+(totalDia>0?' · $'+totalDia.toLocaleString('es-CO'):'')+'</span>'
+    +'</div>'
+    +(citasDia.length > 0
+      ? '<table><thead><tr><th>Hora</th><th>Paciente</th><th>Profesional</th><th>Servicio</th><th>Valor</th><th>Estado</th><th>Notas</th></tr></thead><tbody>'+rows+'</tbody></table>'
+      : '<div style="padding:24px;text-align:center;color:#aaa;font-size:13px;background:#fafafa;border:1px solid #eee;border-top:none;border-radius:0 0 8px 8px">Sin citas para hoy</div>'
+    )
+    +'</div>';
+
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+    +'<title>Agenda de Hoy — Harmony Skin Tech</title>'
+    +'<style>'
+    +'body{font-family:Arial,sans-serif;margin:24px;color:#1a1828;font-size:13px}'
+    +'.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #c4a35a}'
+    +'.clinic{font-size:20px;font-weight:700;color:#1a1828} .clinic-sub{font-size:12px;color:#888;margin-top:4px}'
+    +'h1{color:#c4a35a;margin:0 0 4px 0;font-size:22px} .periodo{font-size:13px;color:#888}'
+    +'table{width:100%;border-collapse:collapse;border:1px solid #eee;border-radius:0 0 8px 8px;border-top:none}'
+    +'th{background:#2a2040;color:#e8c97a;padding:9px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.5px}'
+    +'td{padding:9px 10px;border-bottom:1px solid #f0ece0;vertical-align:top}'
+    +'tr:last-child td{border-bottom:none}'
+    +'.resumen{margin-top:24px;background:#f9f7f0;padding:14px 20px;border-radius:8px;display:flex;gap:32px;border:1px solid #e8dfc8}'
+    +'.sum-item{font-size:13px;color:#666} .sum-val{font-weight:700;color:#c4a35a;font-size:17px;display:block}'
+    +'@media print{body{margin:10px}}'
+    +'</style></head><body>'
+    +'<div class="header">'
+    +'<div><div class="clinic">✦ Harmony Skin Tech</div><div class="clinic-sub">By Dra. Isabel Jiménez</div></div>'
+    +'<div style="text-align:right"><h1>Agenda de Hoy</h1><div class="periodo">'+labelHoy+'</div></div>'
+    +'</div>'
+    + seccionHTML
+    +'<div class="resumen">'
+    +'<div class="sum-item"><span class="sum-val">'+citasDia.length+'</span>Citas totales</div>'
+    +'<div class="sum-item"><span class="sum-val">'+pendientesDia+'</span>Pendientes</div>'
+    +(totalDia>0?'<div class="sum-item"><span class="sum-val">$'+totalDia.toLocaleString('es-CO')+'</span>Ingresos realizados</div>':'')
+    +'</div>'
+    +'<p style="margin-top:20px;font-size:11px;color:#bbb;text-align:right">Impreso el '+new Date().toLocaleDateString('es-CO',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'})+'</p>'
+    +'</body></html>';
+
+  var w = window.open('','_blank');
+  if(!w) { showToast('Permite ventanas emergentes para imprimir','⚠'); return; }
+  w.document.write(html);
+  w.document.close();
+  setTimeout(function(){ w.print(); }, 600);
+}
+
 function exportAgendaDia() {
   var staff = getAllStaff();
   var estadoLabel = {agendada:'🟡 Agendada', realizada:'🟢 Realizada', cancelada:'🔴 Cancelada', reagendada:'🔵 Reagendada'};
