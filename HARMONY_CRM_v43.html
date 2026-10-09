@@ -680,6 +680,9 @@
       </div>
     </div>
 
+    <!-- Panel embudo de conversión -->
+    <div id="alerts-funnel" style="margin-bottom:20px"></div>
+
     <div class="alerts-section">
       <div class="section-title">
         <span class="dot-pulse"></span>
@@ -691,8 +694,8 @@
           <span></span>
           <span>Paciente</span>
           <span>Servicio</span>
-          <span>Días desde</span>
-          <span>Mensaje</span>
+          <span>Días</span>
+          <span>Estado contacto</span>
           <span>Acciones</span>
         </div>
         <div id="alerts-list"></div>
@@ -2493,6 +2496,7 @@ function daysSince(dateStr) {
 function monthsSince(dateStr) { return daysSince(dateStr) / 30.44; }
 
 function isAlertNeeded(p) {
+  if (p.pausadoHasta && new Date(p.pausadoHasta) > new Date()) return false;
   const meses = p.meses || SERVICE_INTERVALS[p.servicio] || 6;
   return monthsSince(p.fecha) >= meses;
 }
@@ -2873,54 +2877,194 @@ function renderAlertsChart() {
 function filterAlerts(val) { alertFilter = val; renderAlerts(); }
 
 function renderAlerts() {
+  // ── Helpers locales ──────────────────────────────────────────────────
+  const getPidStr = p => String(p._docId || p.id);
+  const citasDelPaciente = p => calCitas.filter(c => String(c.pid) === getPidStr(p));
+  const realizadasCount = p => citasDelPaciente(p).filter(c => c.estado === 'realizada').length;
+  const isNuevo = p => realizadasCount(p) <= 1;
+
+  // Pacientes pausados (para panel de reanudación)
+  const pausados = patients.filter(p => p.pausadoHasta && new Date(p.pausadoHasta) > new Date());
+
+  // Lista activa (filtro por servicio incluido)
   const list = patients.filter(p => {
     if (!isAlertNeeded(p)) return false;
     if (alertFilter !== 'all' && p.servicio !== alertFilter) return false;
     return true;
   });
+
   document.getElementById('urgent-count').textContent = list.length;
 
+  // ── Funnel de conversión ─────────────────────────────────────────────
+  // Universo: todos los que necesitan contacto (incluyendo pausados del filtro actual)
+  const universo = patients.filter(p => {
+    const meses = p.meses || SERVICE_INTERVALS[p.servicio] || 6;
+    if (monthsSince(p.fecha) < meses) return false;
+    if (alertFilter !== 'all' && p.servicio !== alertFilter) return false;
+    return true;
+  });
+  const totalAlertados = universo.length;
+  const contactados = universo.filter(p => (p.contactoIntento || 0) >= 1);
+  const agendaron = contactados.filter(p => {
+    const cits = citasDelPaciente(p);
+    return cits.some(c => c.fecha > p.fecha && (c.estado === 'agendada' || c.estado === 'realizada'));
+  });
+  const asistieron = contactados.filter(p => {
+    const cits = citasDelPaciente(p);
+    return cits.some(c => c.fecha > p.fecha && c.estado === 'realizada');
+  });
+  const pagaron = asistieron.filter(p => {
+    const cits = citasDelPaciente(p);
+    return cits.some(c => c.fecha > p.fecha && c.estado === 'realizada' && (c.precio || 0) > 0);
+  });
+
+  // Segmentación nuevo / recurrente de la lista activa
+  const nuevos = list.filter(p => isNuevo(p));
+  const recurrentes = list.filter(p => !isNuevo(p));
+
+  // Tasa de conversión por servicio
+  const svcMap = {};
+  universo.forEach(p => {
+    const svc = p.servicio || 'Sin servicio';
+    if (!svcMap[svc]) svcMap[svc] = { alertados:0, contactados:0, agendaron:0, asistieron:0 };
+    svcMap[svc].alertados++;
+    if ((p.contactoIntento||0) >= 1) svcMap[svc].contactados++;
+    const cits = citasDelPaciente(p);
+    if (cits.some(c => c.fecha > p.fecha && (c.estado==='agendada'||c.estado==='realizada'))) svcMap[svc].agendaron++;
+    if (cits.some(c => c.fecha > p.fecha && c.estado==='realizada')) svcMap[svc].asistieron++;
+  });
+
+  const pct = (n,d) => d ? Math.round(n/d*100) : 0;
+  const fStep = (label, n, total, color) => {
+    const p2 = pct(n, total);
+    return `<div style="flex:1;min-width:120px;background:var(--surface2);border-radius:10px;padding:12px 14px;border-left:3px solid ${color}">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">${label}</div>
+      <div style="font-size:22px;font-weight:700;color:${color}">${n}</div>
+      ${total && n!==total ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">${p2}% del anterior</div>` : ''}
+    </div>`;
+  };
+
+  const svcRows = Object.entries(svcMap).filter(([,v])=>v.alertados>0).sort((a,b)=>b[1].alertados-a[1].alertados).map(([svc,v]) => `
+    <tr>
+      <td style="padding:6px 10px;font-size:12px;color:var(--text)">${svc}</td>
+      <td style="padding:6px 10px;text-align:center;font-size:12px;color:var(--muted)">${v.alertados}</td>
+      <td style="padding:6px 10px;text-align:center;font-size:12px;color:var(--sky)">${v.contactados} <span style="font-size:10px">(${pct(v.contactados,v.alertados)}%)</span></td>
+      <td style="padding:6px 10px;text-align:center;font-size:12px;color:var(--gold)">${v.agendaron} <span style="font-size:10px">(${pct(v.agendaron,v.contactados)}%)</span></td>
+      <td style="padding:6px 10px;text-align:center;font-size:12px;color:var(--mint)">${v.asistieron} <span style="font-size:10px">(${pct(v.asistieron,v.agendaron)}%)</span></td>
+    </tr>`).join('');
+
+  const funnelEl = document.getElementById('alerts-funnel');
+  if (funnelEl) funnelEl.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 20px;margin-bottom:4px">
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px">📊 Embudo de Conversión</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+        ${fStep('Alertados',totalAlertados,null,'var(--alert)')}
+        <div style="display:flex;align-items:center;color:var(--muted);font-size:18px">→</div>
+        ${fStep('Contactados',contactados.length,totalAlertados,'var(--sky)')}
+        <div style="display:flex;align-items:center;color:var(--muted);font-size:18px">→</div>
+        ${fStep('Agendaron',agendaron.length,contactados.length,'var(--gold)')}
+        <div style="display:flex;align-items:center;color:var(--muted);font-size:18px">→</div>
+        ${fStep('Asistieron',asistieron.length,agendaron.length,'var(--mint)')}
+        <div style="display:flex;align-items:center;color:var(--muted);font-size:18px">→</div>
+        ${fStep('Pagaron',pagaron.length,asistieron.length,'#a78bfa')}
+      </div>
+      ${svcRows ? `
+      <details style="margin-top:4px">
+        <summary style="font-size:12px;color:var(--muted);cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px">
+          <span>◈</span> Conversión por servicio
+        </summary>
+        <div style="overflow-x:auto;margin-top:10px">
+          <table style="width:100%;border-collapse:collapse">
+            <thead><tr>
+              <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border)">Servicio</th>
+              <th style="padding:6px 10px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border)">Alertados</th>
+              <th style="padding:6px 10px;text-align:center;font-size:11px;color:var(--sky);font-weight:500;border-bottom:1px solid var(--border)">Contactados</th>
+              <th style="padding:6px 10px;text-align:center;font-size:11px;color:var(--gold);font-weight:500;border-bottom:1px solid var(--border)">Agendaron</th>
+              <th style="padding:6px 10px;text-align:center;font-size:11px;color:var(--mint);font-weight:500;border-bottom:1px solid var(--border)">Asistieron</th>
+            </tr></thead>
+            <tbody>${svcRows}</tbody>
+          </table>
+        </div>
+      </details>` : ''}
+      ${pausados.length > 0 ? `
+      <div style="margin-top:14px;padding:10px 14px;background:rgba(255,169,77,0.06);border:1px solid rgba(255,169,77,0.2);border-radius:10px">
+        <span style="font-size:12px;color:var(--warn)">⏸ ${pausados.length} paciente(s) en pausa:</span>
+        ${pausados.map(p => {
+          const idx2 = patients.indexOf(p);
+          const hasta = new Date(p.pausadoHasta);
+          const diasQ = Math.ceil((hasta-new Date())/(1000*60*60*24));
+          return `<span style="display:inline-flex;align-items:center;gap:4px;background:var(--surface2);border-radius:6px;padding:2px 8px;margin:4px 4px 0 0;font-size:11px">
+            ${p.nombre} ${p.apellido} <span style="color:var(--muted)">(${diasQ}d)</span>
+            <button onclick="reactivarPaciente(${idx2})" style="background:none;border:none;color:var(--mint);cursor:pointer;font-size:11px;padding:0 2px" title="Reactivar">▶</button>
+          </span>`;
+        }).join('')}
+      </div>` : ''}
+    </div>`;
+
+  // ── Lista principal ──────────────────────────────────────────────────
   if (list.length === 0) {
     document.getElementById('alerts-list').innerHTML = `
       <div class="empty-state"><div class="big">✓</div>No hay alertas pendientes</div>`;
     return;
   }
 
-  document.getElementById('alerts-list').innerHTML = list.map((p,i) => {
-    const days = daysSince(p.fecha);
-    const urg = getUrgency(p);
-    const {fg,bg} = serviceColor(p.servicio);
-    const urgChip = urg==='crítico'
-      ? `<span class="chip red">⚠ Crítico</span>`
-      : `<span class="chip yellow">⚡ Urgente</span>`;
+  const renderGroup = (arr, label) => {
+    if (!arr.length) return '';
+    return `<div style="padding:6px 16px;background:var(--surface2);font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0.05em;text-transform:uppercase">${label} (${arr.length})</div>` +
+    arr.map(p => {
+      const days = daysSince(p.fecha);
+      const urg = getUrgency(p);
+      const {fg,bg} = serviceColor(p.servicio);
+      const urgChip = urg==='crítico'
+        ? `<span class="chip red">⚠ Crítico</span>`
+        : `<span class="chip yellow">⚡ Urgente</span>`;
+      const idx = patients.indexOf(p);
+      const intentos = p.contactoIntento || 0;
+      const ultimaFecha = p.contactoFecha
+        ? new Date(p.contactoFecha).toLocaleDateString('es-CO',{day:'numeric',month:'short'})
+        : null;
 
-    const msgBtn = p.msgStatus === 'enviado'
-      ? `<span class="status-badge" style="background:rgba(122,184,224,0.15);color:#7ab8e0">✉ Enviado</span>`
-      : p.msgStatus === 'respondido'
-      ? `<span class="status-badge" style="background:rgba(111,207,176,0.15);color:#6fcfb0">✓ Respondió</span>`
-      : `<span class="status-badge" style="background:rgba(255,107,107,0.15);color:#ff6b6b">✗ Sin contacto</span>`;
+      // Verificar si ya agendó nueva cita
+      const cits = citasDelPaciente(p);
+      const yaAgendo = cits.some(c => c.fecha > p.fecha && (c.estado==='agendada'||c.estado==='realizada'));
 
-    const idx = patients.indexOf(p);
-    return `
-    <div class="alert-item">
-      <div class="avatar" style="background:${avatarColor(p)};color:${fg}">${initials(p)}</div>
-      <div>
-        <div class="patient-name">${p.nombre} ${p.apellido}</div>
-        <div class="patient-phone" style="white-space:nowrap">${p.telefono}</div>
-      </div>
-      <span class="service-tag" style="background:${bg};color:${fg}">◆ ${p.servicio}</span>
-      <div>
-        <div style="font-weight:600;color:${urg==='crítico'?'var(--alert)':'var(--warn)'}">${days}d</div>
-        ${urgChip}
-      </div>
-      <div onclick="cycleMsgStatus(${idx})" style="cursor:pointer">${msgBtn}</div>
-      <div class="actions">
-        <button class="btn btn-sm btn-outline" onclick="openWhatsApp(${idx})">WA</button>
-        <button class="btn btn-sm btn-outline" onclick="viewPatient(${idx})">Ver</button>
-        <button class="btn btn-sm btn-outline" onclick="openAddService(${idx})">+ Servicio</button>
-      </div>
-    </div>`;
-  }).join('');
+      let contactoChip;
+      if (yaAgendo) {
+        contactoChip = `<span style="background:rgba(111,207,176,0.15);color:var(--mint);border-radius:8px;padding:3px 9px;font-size:11px;font-weight:600">✅ Agendó</span>`;
+      } else if (intentos === 0) {
+        contactoChip = `<span style="background:rgba(255,107,107,0.12);color:var(--alert);border-radius:8px;padding:3px 9px;font-size:11px">✗ Sin contacto</span>`;
+      } else {
+        contactoChip = `<span style="background:rgba(122,184,224,0.12);color:var(--sky);border-radius:8px;padding:3px 9px;font-size:11px">
+          📞 ${intentos} intento${intentos>1?'s':''}${ultimaFecha?' · '+ultimaFecha:''}
+        </span>`;
+      }
+
+      return `
+      <div class="alert-item">
+        <div class="avatar" style="background:${avatarColor(p)};color:${fg}">${initials(p)}</div>
+        <div>
+          <div class="patient-name">${p.nombre} ${p.apellido}</div>
+          <div class="patient-phone" style="white-space:nowrap">${p.telefono}</div>
+        </div>
+        <span class="service-tag" style="background:${bg};color:${fg}">◆ ${p.servicio}</span>
+        <div>
+          <div style="font-weight:600;color:${urg==='crítico'?'var(--alert)':'var(--warn)'}">${days}d</div>
+          ${urgChip}
+        </div>
+        <div>${contactoChip}</div>
+        <div class="actions">
+          <button class="btn btn-sm btn-outline" onclick="openWhatsApp(${idx})" title="Enviar WhatsApp">WA</button>
+          <button class="btn btn-sm btn-outline" onclick="viewPatient(${idx})">Ver</button>
+          <button class="btn btn-sm btn-outline" onclick="openAddService(${idx})">+ Servicio</button>
+          ${intentos > 0 ? `<button class="btn btn-sm" onclick="pausarPaciente(${idx})" style="background:rgba(255,169,77,0.15);color:var(--warn);border:1px solid rgba(255,169,77,0.3);font-size:11px" title="Pausar 30 días por no responde">⏸ 30d</button>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  };
+
+  document.getElementById('alerts-list').innerHTML =
+    renderGroup(nuevos, '🆕 Nuevos pacientes') +
+    renderGroup(recurrentes, '🔄 Pacientes recurrentes');
 }
 
 function cycleMsgStatus(idx) {
@@ -2944,9 +3088,34 @@ function openWhatsApp(idx) {
   p.msgStatus = 'enviado';
   p.msgFechaEnvio = now.toISOString();
   p.msgFechaEnvioLabel = fechaEnvio;
+  p.contactoIntento = (p.contactoIntento || 0) + 1;
+  p.contactoFecha = now.toISOString();
+  p.contactoEstado = 'contactado';
   savePatientFS(p);
   renderAlerts();
-  showToast('WhatsApp abierto · Registrado ' + fechaEnvio,'📤');
+  showToast('WhatsApp abierto · Intento ' + p.contactoIntento + ' · ' + fechaEnvio, '📤');
+}
+
+function pausarPaciente(idx) {
+  const p = patients[idx];
+  if (!confirm('¿Pausar alertas de ' + p.nombre + ' ' + p.apellido + ' por 30 días?\n\nNo aparecerá en alertas hasta que reingrese la fecha.')) return;
+  const hasta = new Date();
+  hasta.setDate(hasta.getDate() + 30);
+  p.pausadoHasta = hasta.toISOString();
+  p.contactoEstado = 'no_responde';
+  savePatientFS(p);
+  renderAlerts();
+  renderDashboard();
+  showToast(p.nombre + ' pausado/a 30 días', '⏸');
+}
+
+function reactivarPaciente(idx) {
+  const p = patients[idx];
+  p.pausadoHasta = null;
+  p.contactoEstado = null;
+  savePatientFS(p);
+  renderAlerts();
+  showToast(p.nombre + ' reactivado/a', '▶');
 }
 
 // ─── PATIENTS TABLE ───────────────────────────────────────────────────
