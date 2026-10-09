@@ -4217,8 +4217,9 @@ const cardBg = c.estado==='realizada'?'rgba(111,207,176,0.1)':c.estado==='no_vin
 const cardBorder = c.estado==='realizada'?'#6fcfb0':c.estado==='no_vino'?'#888':canceled?'#ff6b6b':s.color;
 const blockIcon = c.estado==='realizada'?'🔒':c.estado==='no_vino'?'🚫':canceled?'🚫':'';
 var esVal=c.tipo==='valoracion';
-const blockedMsg=c.estado==='realizada'?'Cita completada — solo lectura':c.estado==='no_vino'?'🚫 No vino — solo lectura':'Cita cancelada — solo lectura';
-return`<div onclick="event.stopPropagation();${c.estado==='realizada'?`openEditCita(${idx})`:(isBlocked?`showToast('${blockedMsg}','🔒')`:`openEditCita(${idx})`)}" style="background:${cardBg};border-left:3px solid ${cardBorder};border-radius:6px;padding:5px 8px;margin-bottom:3px;cursor:${isBlocked?'default':'pointer'};opacity:${isBlocked?0.65:1};${isBlocked?'filter:saturate(0.7)':''};" title="${blockedMsg}"><div style="font-size:10px;font-weight:600;color:${cardBorder}">${icon} ${c.hi}${c.hf?' → '+c.hf:''} ${blockIcon}</div><div style="font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;font-weight:500;${c.estado==='no_vino'?'text-decoration:line-through;opacity:0.6':''}">${nm}</div>${c.svc?`<div style="font-size:10px;color:var(--muted)">${c.svc.substring(0,28)}</div>`:''}${c.precio&&c.estado!=='no_vino'?`<div style="font-size:10px;color:var(--gold)">$${Number(c.precio).toLocaleString('es-CO')}</div>`:''}</div>`;}).join('')}</div>`;
+const estadoLabel={agendada:'🟡 Agendada',realizada:'🟢 Realizada',cancelada:'🔴 Cancelada',reagendada:'🔵 Reagendada',no_vino:'🚫 No vino'};
+const tipTitle=`${nm} · ${c.hi}${c.hf?' → '+c.hf:''} · ${c.svc||'Sin servicio'} · ${estadoLabel[c.estado||'agendada']||c.estado}`;
+return`<div onclick="event.stopPropagation();openEditCita(${idx})" style="background:${cardBg};border-left:3px solid ${cardBorder};border-radius:6px;padding:5px 8px;margin-bottom:3px;cursor:pointer;opacity:${isBlocked?0.65:1};${isBlocked?'filter:saturate(0.7)':''};" title="${tipTitle}"><div style="font-size:10px;font-weight:600;color:${cardBorder}">${icon} ${c.hi}${c.hf?' → '+c.hf:''} ${blockIcon}</div><div style="font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;font-weight:500;${c.estado==='no_vino'?'text-decoration:line-through;opacity:0.6':''}">${nm}</div>${c.svc?`<div style="font-size:10px;color:var(--muted)">${c.svc.substring(0,28)}</div>`:''}${c.precio&&c.estado!=='no_vino'?`<div style="font-size:10px;color:var(--gold)">$${Number(c.precio).toLocaleString('es-CO')}</div>`:''}</div>`;}).join('')}</div>`;
     }).join('')}</div>`;
   }}
   const bod=document.getElementById('cal-body');if(bod)bod.innerHTML=html;
@@ -4321,12 +4322,12 @@ function renderWeekCalendar(){
             const staffW=getAllStaff().find(s=>s.id===c.staffId);
             const color=staffW?staffW.color:estadoColor[c.estado||'agendada'];
             const isBlockedW=c.estado==='realizada'||c.estado==='cancelada'||c.estado==='reagendada'||c.estado==='no_vino';
-            const tipText=nm+' | '+c.hi+(c.hf?' -> '+c.hf:'')+' | '+(c.svc||'Sin servicio');
-            const wMsg=c.estado==='realizada'?'🔒 Completada':c.estado==='cancelada'?'🚫 Cancelada':c.estado==='no_vino'?'🚫 No vino':'🔵 Reagendada';
-            return`<div onclick="event.stopPropagation();${c.estado==='realizada'?`openEditCita(${idx})`:(isBlockedW?`showToast('${wMsg}','🔒')`:`openEditCita(${idx})`)}"
+            const wEstadoLabel={agendada:'🟡 Agendada',realizada:'🟢 Realizada',cancelada:'🔴 Cancelada',reagendada:'🔵 Reagendada',no_vino:'🚫 No vino'};
+            const tipText=nm+' | '+c.hi+(c.hf?' -> '+c.hf:'')+' | '+(c.svc||'Sin servicio')+' | '+(wEstadoLabel[c.estado||'agendada']||c.estado)+(staffW?' | '+staffW.nombre:'');
+            return`<div onclick="event.stopPropagation();openEditCita(${idx})"
               onmouseenter="showCalTip(event,this)" onmouseleave="hideCalTip()"
               data-tip="${tipText.replace(/"/g,"'")}"
-              style="background:${color}22;border-left:2px solid ${color};border-radius:4px;padding:2px 5px;margin-bottom:2px;cursor:${isBlockedW?'default':'pointer'};font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:${isBlockedW?0.6:1};${isBlockedW?'filter:saturate(0.5)':''}">
+              style="background:${color}22;border-left:2px solid ${color};border-radius:4px;padding:2px 5px;margin-bottom:2px;cursor:pointer;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:${isBlockedW?0.6:1};${isBlockedW?'filter:saturate(0.5)':''}">
               <span style="color:${color};font-weight:600">${c.hi}</span> ${shortNm}
             </div>`;
           }).join('')}
@@ -4389,15 +4390,20 @@ function openNewCita(f,t,sid){
 function openEditCita(idx){
   var c=calCitas[idx];
   if(c.estado==='realizada'||c.estado==='cancelada'||c.estado==='reagendada'||c.estado==='no_vino'){
-    if(isAdmin && c.estado==='realizada'){
-      if(confirm('🔒 Esta cita fue marcada como completada.\n\n¿Deseas revertirla a "Agendada"?\n\nSe corregirá también el registro del paciente.')){
-        revertirCitaRealizada(idx);
+    if(isAdmin){
+      if(c.estado==='realizada'){
+        if(confirm('🔒 Esta cita fue marcada como completada.\n\n¿Deseas revertirla a "Agendada"?\n\nSe corregirá también el registro del paciente.')){
+          revertirCitaRealizada(idx);
+        }
+        return;
       }
+      // Admin puede editar citas canceladas, reagendadas o no_vino
+      // Fall through al modal de edición
+    } else {
+      const msgs={realizada:'🔒 Cita completada — solo lectura',cancelada:'🚫 Cita cancelada — solo lectura',reagendada:'🔵 Cita reagendada — solo lectura',no_vino:'🚫 Paciente no vino — solo lectura'};
+      showToast(msgs[c.estado]||'Solo lectura','🔒');
       return;
     }
-    const msgs={realizada:'🔒 Cita completada — solo lectura',cancelada:'🚫 Cita cancelada — solo lectura',reagendada:'🔵 Cita reagendada — solo lectura',no_vino:'🚫 Paciente no vino — solo lectura'};
-    showToast(msgs[c.estado]||'Solo lectura','🔒');
-    return;
   }
   editCitaIdx=idx;
   document.getElementById('modal-cita-title').textContent='Editar Cita';
