@@ -4195,12 +4195,15 @@ function renderCalendar(){
       const blq=getBloqueo(s.id,ds,t);
       if(blq){
         const motivoTxt=blq.motivo?` — ${blq.motivo}`:'';
-        return`<div style="border-right:1px solid var(--border);min-height:${dsh?36:52}px;background:repeating-linear-gradient(45deg,rgba(255,107,107,0.06),rgba(255,107,107,0.06) 4px,transparent 4px,transparent 10px);cursor:not-allowed;position:relative;" onclick="showToast('🔒 Bloqueado${motivoTxt}','🚫')" title="Bloqueado${motivoTxt}">
-          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center"><span style="font-size:9px;color:var(--alert);opacity:0.6">🔒</span></div>
+        const blqClick=isAdmin
+          ?`if(confirm('¿Desbloquear este horario?\\n${s.nombre} · ${t}${blq.motivo?' — '+blq.motivo:''}'))deleteBloqueo('${blq._docId}')`
+          :`showToast('🔒 Bloqueado${motivoTxt}','🚫')`;
+        return`<div style="border-right:1px solid var(--border);min-height:${dsh?36:52}px;background:repeating-linear-gradient(45deg,rgba(255,107,107,0.06),rgba(255,107,107,0.06) 4px,transparent 4px,transparent 10px);cursor:${isAdmin?'pointer':'not-allowed'};position:relative;" onclick="${blqClick}" title="${isAdmin?'Click para desbloquear':'Bloqueado'+motivoTxt}">
+          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center"><span style="font-size:9px;color:var(--alert);opacity:0.6">${isAdmin?'🔓':'🔒'}</span></div>
         </div>`;
       }
-      // Check duration blocking: slot inside a cita's hi→hf range
-      const blockingCita=calCitas.find(c=>c.fecha===ds&&c.staffId===s.id&&c.hf&&c.hi<t&&t<c.hf);
+      // Check duration blocking: slot inside a cita's hi→hf range (excluir canceladas/reagendadas/no_vino)
+      const blockingCita=calCitas.find(c=>c.fecha===ds&&c.staffId===s.id&&c.hf&&c.hi<t&&t<c.hf&&c.estado!=='cancelada'&&c.estado!=='reagendada'&&c.estado!=='no_vino');
       if(blockingCita){
         const bNm=patients.find(x=>String(x.id)===String(blockingCita.pid)||String(x._docId)===String(blockingCita.pid));
         const bName=bNm?bNm.nombre:(blockingCita.pnom||'');
@@ -4913,7 +4916,7 @@ function checkConflict(fecha, hi, hf, staffId, excludeId) {
   return calCitas.find(function(c) {
     if(c.id === excludeId) return false;
     if(c.fecha !== fecha || c.staffId !== staffId) return false;
-    if(c.estado === 'cancelada') return false;
+    if(c.estado === 'cancelada' || c.estado === 'reagendada' || c.estado === 'no_vino') return false;
     var cEnd = c.hf || c.hi;
     var newEnd = hf || hi;
     return hi < cEnd && newEnd > c.hi;
