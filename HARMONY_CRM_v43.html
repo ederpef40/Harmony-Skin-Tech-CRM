@@ -4303,17 +4303,11 @@ function renderWeekCalendar(){
             <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center"><span style="font-size:9px;color:var(--alert);opacity:0.6">🔒</span></div>
           </td>`;
         }
-        const blocking=calCitas.find(c=>c.fecha===ds&&c.hf&&c.hi<t&&t<c.hf);
-        if(blocking){
-          const bStaff=getAllStaff().find(s=>s.id===blocking.staffId);
-          const bColor=bStaff?bStaff.color:'#ffa94d';
-          const bNm=patients.find(x=>String(x.id)===String(blocking.pid)||String(x._docId)===String(blocking.pid));
-          const bName=bNm?bNm.nombre:(blocking.pnom||'');
-          return`<td style="border-right:1px solid var(--border);height:${rowH}px;background:${bColor}18;cursor:not-allowed;position:relative;" onclick="showToast('🔒 ${bName} · ${blocking.hi}→${blocking.hf}','⏰')">
-            <div style="position:absolute;left:0;right:0;top:50%;height:2px;background:${bColor};opacity:0.3;transform:translateY(-50%)"></div>
-          </td>`;
-        }
-        return`<td onclick="openNewCita('${ds}','${t}','')" style="border-right:1px solid var(--border);padding:2px;cursor:pointer;height:${rowH}px;vertical-align:top;overflow:hidden;${isToday?'background:rgba(232,201,122,0.03)':''}" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='${isToday?'rgba(232,201,122,0.03)':''}'">
+        // Citas con duración que cubren este slot (sólo como indicador visual, no bloquean)
+        const blockings=calCitas.filter(c=>c.fecha===ds&&c.hf&&c.hi<t&&t<c.hf&&c.estado!=='cancelada'&&c.estado!=='reagendada'&&c.estado!=='no_vino');
+        const bBars=blockings.map(bl=>{const bs=getAllStaff().find(s=>s.id===bl.staffId);const bc=bs?bs.color:'#ffa94d';return`<div style="position:absolute;left:${blockings.indexOf(bl)*4}px;top:0;bottom:0;width:3px;background:${bc};opacity:0.35;border-radius:0 2px 2px 0" title="${bs?bs.nombre:''} en cita hasta ${bl.hf}"></div>`;}).join('');
+        return`<td onclick="openNewCita('${ds}','${t}','')" style="border-right:1px solid var(--border);padding:2px;cursor:pointer;height:${rowH}px;vertical-align:top;overflow:hidden;position:relative;${isToday?'background:rgba(232,201,122,0.03)':''}" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='${isToday?'rgba(232,201,122,0.03)':''}'">
+          ${bBars}
           ${cits.map(c=>{
             const idx=calCitas.indexOf(c);
             const p=patients.find(x=>String(x.id)===String(c.pid));
