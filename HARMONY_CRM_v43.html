@@ -4261,7 +4261,7 @@ function exportarCSVCitas() {
 const FIXED_STAFF=[{id:'isabel',nombre:'Dra. Isabel',color:'#e8c97a',fixed:true},{id:'neifer',nombre:'Dr. Neifer',color:'#7ab8e0',fixed:true}];
 let calDate=new Date(), calCitas=[], calStaff=[], calBloqueos=[], editCitaIdx=null, pcColor='#a78bfa';
 let calStaffFilter=null; // null = mostrar todos, staffId = filtrar por ese profesional
-function getAllStaff(){return[...FIXED_STAFF,...calStaff];}
+function getAllStaff(){const ov=new Set(calStaff.map(s=>s.id));return[...FIXED_STAFF.filter(s=>!ov.has(s.id)),...calStaff];}
 function saveCalData(){ /* Firestore handles persistence */ }
 let calView = 'day'; // 'day' or 'week'
 
@@ -4341,7 +4341,8 @@ function renderCalendar(){
   if(chips)chips.innerHTML=staff.map(s=>{
     const cnt=calCitas.filter(c=>c.fecha===ds&&c.staffId===s.id).length;
     const isActive=calStaffFilter===s.id;
-    return`<span onclick="toggleStaffFilter('${s.id}')" style="display:inline-flex;align-items:center;gap:5px;background:${isActive?s.color+'44':s.color+'22'};color:${s.color};border:2px solid ${isActive?s.color:s.color+'55'};border-radius:20px;padding:4px 12px;font-size:12px;font-weight:500;cursor:pointer;transition:all 0.15s;${isActive?'box-shadow:0 0 0 2px '+s.color+'33':''}"><span style="width:8px;height:8px;border-radius:50%;background:${s.color}"></span>${s.nombre}<span style="background:${s.color}33;border-radius:10px;padding:1px 6px;font-size:10px">${cnt}</span>${isActive?'<span style="font-size:10px">✕</span>':''}</span>`;
+    const editBtn=isAdmin?`<span onclick="event.stopPropagation();editStaff('${s.id}')" title="Editar profesional" style="opacity:0.6;font-size:10px;margin-left:2px;cursor:pointer" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'">✏</span>`:'';
+    return`<span onclick="toggleStaffFilter('${s.id}')" style="display:inline-flex;align-items:center;gap:5px;background:${isActive?s.color+'44':s.color+'22'};color:${s.color};border:2px solid ${isActive?s.color:s.color+'55'};border-radius:20px;padding:4px 12px;font-size:12px;font-weight:500;cursor:pointer;transition:all 0.15s;${isActive?'box-shadow:0 0 0 2px '+s.color+'33':''}"><span style="width:8px;height:8px;border-radius:50%;background:${s.color}"></span>${s.nombre}<span style="background:${s.color}33;border-radius:10px;padding:1px 6px;font-size:10px">${cnt}</span>${isActive?'<span style="font-size:10px">✕</span>':''}${editBtn}</span>`;
   }).join('');
   const sel=document.getElementById('cita-staff');
   if(sel)sel.innerHTML='<option value="">Seleccionar...</option>'+staff.map(s=>`<option value="${s.id}">${s.nombre}</option>`).join('');
@@ -4966,9 +4967,20 @@ function pickCitaSvc(name,price){
 // Staff management
 let editStaffId=null;
 function openAddStaff(){editStaffId=null;document.getElementById('modal-staff-title').textContent='Nuevo Profesional';document.getElementById('staff-nombre').value='';document.getElementById('btn-del-staff').style.display='none';pickColor('#a78bfa');document.getElementById('modal-staff').classList.add('open');}
-function editStaff(id){const s=calStaff.find(x=>x.id===id);if(!s)return;editStaffId=id;document.getElementById('modal-staff-title').textContent='Editar Profesional';document.getElementById('staff-nombre').value=s.nombre;document.getElementById('btn-del-staff').style.display='inline-flex';pickColor(s.color);document.getElementById('modal-staff').classList.add('open');}
+function editStaff(id){
+  const s=getAllStaff().find(x=>x.id===id);
+  if(!s)return;
+  editStaffId=id;
+  document.getElementById('modal-staff-title').textContent='Editar Profesional';
+  document.getElementById('staff-nombre').value=s.nombre;
+  // Mostrar eliminar solo si ya está en calStaff (no si es fijo sin override aún)
+  const enCalStaff=calStaff.find(x=>x.id===id);
+  document.getElementById('btn-del-staff').style.display=enCalStaff&&!s.fixed?'inline-flex':'none';
+  pickColor(s.color);
+  document.getElementById('modal-staff').classList.add('open');
+}
 function deleteStaff(){
-  if(!confirm('¿Eliminar?'))return;
+  if(!confirm('¿Eliminar profesional?'))return;
   const s=calStaff.find(x=>x.id===editStaffId);
   if(s) deleteStaffFS(s);
   closeModal('modal-staff');
@@ -4980,14 +4992,19 @@ function saveStaff(){
   if(!nombre){showToast('Escribe el nombre','⚠');return;}
   let rec;
   if(editStaffId){
-    const s=calStaff.find(x=>x.id===editStaffId);
-    rec={...(s||{}),id:editStaffId,nombre,color,fixed:false};
+    const existeEnCal=calStaff.find(x=>x.id===editStaffId);
+    const base=getAllStaff().find(x=>x.id===editStaffId)||{};
+    rec={...base,...(existeEnCal||{}),id:editStaffId,nombre,color,fixed:false};
+    if(existeEnCal){ calStaff[calStaff.indexOf(existeEnCal)]=rec; }
+    else { calStaff.push(rec); }
   } else {
     rec={id:'s'+Date.now(),nombre,color,fixed:false};
+    calStaff.push(rec);
   }
   saveStaffFS(rec);
   closeModal('modal-staff');
-  showToast('Guardado','✓');
+  renderCalendar();
+  showToast('Profesional guardado','✓');
 }
 
 // Close dropdowns on outside click
