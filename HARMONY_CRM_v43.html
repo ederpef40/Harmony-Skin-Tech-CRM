@@ -203,7 +203,7 @@
 
   .alert-item {
     display: grid;
-    grid-template-columns: 44px 1fr 130px 110px 120px 160px;
+    grid-template-columns: 44px 1fr 130px 110px 120px auto;
     align-items: center;
     gap: 16px;
     padding: 16px 20px;
@@ -392,7 +392,7 @@
   @media(max-width:1200px) {
     .kpi-grid { grid-template-columns: repeat(2,1fr); }
     .charts-row { grid-template-columns: 1fr; }
-    .alert-item { grid-template-columns: 44px 1fr 120px 100px 120px; }
+    .alert-item { grid-template-columns: 44px 1fr 120px 100px 120px; overflow-x: auto; }
   }
 
   .dot-pulse {
