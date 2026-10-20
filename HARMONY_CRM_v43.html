@@ -3060,7 +3060,7 @@ function renderAlerts() {
         <div class="actions">
           <button class="btn btn-sm btn-outline" onclick="openWhatsApp(${idx})" title="Enviar WhatsApp">WA</button>
           <button class="btn btn-sm btn-outline" onclick="viewPatient(${idx})">Ver</button>
-          <button class="btn btn-sm btn-outline" onclick="openAddService(${idx})" title="Agendó — agregar nuevo servicio">+ Servicio</button>
+          <button class="btn btn-sm btn-outline" onclick="agendarDesdeAlerta(${idx})" title="Agendar nueva cita para esta paciente">📅 Agendar</button>
           ${intentos > 0 ? `<button class="btn btn-sm" onclick="pausarPaciente(${idx})" style="background:rgba(255,169,77,0.15);color:var(--warn);border:1px solid rgba(255,169,77,0.3);font-size:11px" title="Pausar 30 días — no responde">⏸ 30d</button>` : ''}
           <button class="btn btn-sm" onclick="darDeBajaSeguimiento(${idx})" style="background:rgba(255,107,107,0.1);color:var(--alert);border:1px solid rgba(255,107,107,0.25);font-size:11px" title="No quiere más servicios — retirar del seguimiento">🚫 No quiere</button>
         </div>
@@ -3127,6 +3127,30 @@ function openWhatsApp(idx) {
   savePatientFS(p);
   renderAlerts();
   showToast('WhatsApp abierto · Intento ' + p.contactoIntento + ' · ' + fechaEnvio, '📤');
+}
+
+function agendarDesdeAlerta(idx) {
+  const p = patients[idx];
+  if (!p) return;
+  // Navegar al calendario si no está visible
+  showView('calendario');
+  // Abrir modal de nueva cita con la paciente pre-seleccionada
+  const hoy = toLocalDateStr(new Date());
+  openNewCita(hoy, '09:00', '');
+  // Pre-llenar la paciente en el buscador del modal
+  const pid = p._docId || String(p.id);
+  document.getElementById('cita-pac-search').value = p.nombre + ' ' + p.apellido;
+  document.getElementById('cita-pac-id').value = pid;
+  document.getElementById('cita-pac-info').style.display = 'block';
+  document.getElementById('cita-pac-info-text').innerHTML =
+    '<b>' + p.nombre + ' ' + p.apellido + '</b> · ' + p.telefono +
+    (p.servicio ? ' · Último: ' + p.servicio : '');
+  document.getElementById('cita-nuevo-pac').style.display = 'none';
+  // Pre-llenar el servicio con el último que tuvo
+  if (p.servicio) {
+    const svcEl = document.getElementById('cita-svc');
+    if (svcEl) svcEl.value = p.servicio;
+  }
 }
 
 function darDeBajaSeguimiento(idx) {
