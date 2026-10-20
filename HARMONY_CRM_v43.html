@@ -766,6 +766,7 @@
         <button class="btn btn-outline" id="cal-next-btn" onclick="calNext()">Siguiente →</button>
         <button class="btn btn-outline" onclick="exportAgendaHoy()" title="Imprimir agenda de hoy">🖨️ Imprimir Hoy</button>
         <button class="btn btn-outline" onclick="exportAgendaDia()" title="Imprimir agenda del día siguiente">🖨️ Imprimir Día Siguiente</button>
+        <button class="btn btn-outline" onclick="exportAgendaSemana()" title="Imprimir panorama completo de la semana (Lun–Sáb)">🖨️ Semana</button>
         <button class="btn btn-outline" onclick="openBloquearAgenda()" style="color:var(--alert);border-color:rgba(255,107,107,0.4)" title="Bloquear agenda de un profesional">🔒 Bloquear</button>
         <button class="btn btn-primary" onclick="openAddStaff()">+ Profesional</button>
       </div>
@@ -5615,6 +5616,122 @@ function exportAgendaDia() {
     +(totalDia>0?'<div class="sum-item"><span class="sum-val">$'+totalDia.toLocaleString('es-CO')+'</span>Valor estimado</div>':'')
     +'</div>'
     +'<p style="margin-top:20px;font-size:11px;color:#bbb;text-align:right">Impreso el '+new Date().toLocaleDateString('es-CO',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'})+'</p>'
+    +'</body></html>';
+
+  var w = window.open('','_blank');
+  if(!w) { showToast('Permite ventanas emergentes para imprimir','⚠'); return; }
+  w.document.write(html);
+  w.document.close();
+  setTimeout(function(){ w.print(); }, 600);
+}
+
+function exportAgendaSemana() {
+  var staff = getAllStaff();
+  var estadoLabel = {agendada:'Agendada', realizada:'Realizada', cancelada:'Cancelada', reagendada:'Reagendada', no_vino:'No vino'};
+  var estadoColor = {agendada:'#e8a900', realizada:'#3cb371', cancelada:'#cc4444', reagendada:'#4488cc', no_vino:'#888'};
+  var DIAS_NOMBRE = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  var DIAS_LARGO  = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+
+  // Calcular el lunes de la semana actual
+  var hoy = new Date();
+  var dow = hoy.getDay(); // 0=Dom
+  var diffLunes = dow === 0 ? -6 : 1 - dow;
+  var lunes = new Date(hoy);
+  lunes.setDate(hoy.getDate() + diffLunes);
+
+  // Rango de fechas (lunes a sábado)
+  var dias = [];
+  for (var i = 0; i < 6; i++) {
+    var d = new Date(lunes);
+    d.setDate(lunes.getDate() + i);
+    dias.push(d);
+  }
+
+  var labelSemana = 'Semana del '
+    + lunes.toLocaleDateString('es-CO',{day:'numeric',month:'long'})
+    + ' al '
+    + dias[5].toLocaleDateString('es-CO',{day:'numeric',month:'long',year:'numeric'});
+
+  var totalSemana = 0, pendientesSemana = 0, citasSemana = 0;
+  var todayStr = toLocalDateStr(hoy);
+
+  var seccionesHTML = dias.map(function(d) {
+    var fechaStr = toLocalDateStr(d);
+    var esHoy = fechaStr === todayStr;
+    var nombreDia = DIAS_LARGO[d.getDay()];
+    var labelDia = nombreDia + ', ' + d.toLocaleDateString('es-CO',{day:'numeric',month:'long'});
+
+    var citasDia = calCitas
+      .filter(function(c){ return c.fecha === fechaStr && c.estado !== 'cancelada'; })
+      .sort(function(a,b){ return (a.hi||'').localeCompare(b.hi||''); });
+
+    citasSemana    += citasDia.length;
+    var totalDia    = citasDia.filter(function(c){return c.estado==='realizada';}).reduce(function(s,c){return s+(c.precio||0);},0);
+    var pendDia     = citasDia.filter(function(c){return !c.estado||c.estado==='agendada';}).length;
+    pendientesSemana += pendDia;
+    totalSemana    += totalDia;
+
+    var headerBg = esHoy ? '#2a2040' : '#f5f0e8';
+    var headerColor = esHoy ? '#e8c97a' : '#1a1828';
+
+    var rows = citasDia.map(function(c) {
+      var s = staff.find(function(x){return x.id===c.staffId;});
+      var p = patients.find(function(x){return String(x.id)===String(c.pid)||String(x._docId)===String(c.pid);});
+      var nom = p ? p.nombre+' '+p.apellido : (c.pnom||'Paciente');
+      var tel = p ? p.telefono : '';
+      var est = c.estado||'agendada';
+      var estColor = estadoColor[est]||'#888';
+      return '<tr>'
+        +'<td style="white-space:nowrap;font-weight:700;color:#c4a35a;width:80px">'+c.hi+(c.hf?'–'+c.hf:'')+'</td>'
+        +'<td><b>'+nom+'</b>'+(tel?'<br><span style="font-size:10px;color:#999">'+tel+'</span>':'')+'</td>'
+        +'<td style="white-space:nowrap">'+(s?'<span style="color:'+s.color+';font-size:11px">●</span> '+s.nombre:'—')+'</td>'
+        +'<td style="font-size:12px">'+(c.svc||'—')+'</td>'
+        +'<td style="white-space:nowrap;font-size:12px">'+(c.precio?'$'+Number(c.precio).toLocaleString('es-CO'):'—')+'</td>'
+        +'<td style="font-size:11px;white-space:nowrap"><span style="color:'+estColor+'">'+estadoLabel[est]+'</span></td>'
+        +'</tr>';
+    }).join('');
+
+    return '<div class="dia-sec" style="margin-bottom:18px;page-break-inside:avoid">'
+      +'<div style="background:'+headerBg+';color:'+headerColor+';padding:8px 14px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center">'
+      +'<span style="font-weight:700;font-size:14px">'+(esHoy?'⟶ ':'')+labelDia+'</span>'
+      +'<span style="font-size:11px;opacity:0.75">'+citasDia.length+' cita'+(citasDia.length!==1?'s':'')
+      +(pendDia?' · '+pendDia+' pend.':'')
+      +(totalDia?' · $'+totalDia.toLocaleString('es-CO'):'')
+      +'</span>'
+      +'</div>'
+      +(citasDia.length > 0
+        ? '<table><thead><tr><th>Hora</th><th>Paciente</th><th>Profesional</th><th>Servicio</th><th>Valor</th><th>Estado</th></tr></thead><tbody>'+rows+'</tbody></table>'
+        : '<div style="padding:12px 16px;color:#bbb;font-size:12px;background:#fafafa;border:1px solid #eee;border-top:none;border-radius:0 0 8px 8px">Sin citas</div>'
+      )
+      +'</div>';
+  }).join('');
+
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+    +'<title>Agenda Semanal — Harmony Skin Tech</title>'
+    +'<style>'
+    +'body{font-family:Arial,sans-serif;margin:20px 24px;color:#1a1828;font-size:13px}'
+    +'.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:14px;border-bottom:3px solid #c4a35a}'
+    +'.clinic{font-size:18px;font-weight:700;color:#1a1828}.clinic-sub{font-size:12px;color:#888;margin-top:3px}'
+    +'h1{color:#c4a35a;margin:0 0 3px 0;font-size:20px}.periodo{font-size:12px;color:#888}'
+    +'table{width:100%;border-collapse:collapse;border:1px solid #eee;border-top:none;border-radius:0 0 8px 8px}'
+    +'th{background:#2a2040;color:#e8c97a;padding:7px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.5px}'
+    +'td{padding:7px 10px;border-bottom:1px solid #f5f0e8;vertical-align:top;font-size:12px}'
+    +'tr:last-child td{border-bottom:none}'
+    +'.resumen{margin-top:20px;background:#f9f7f0;padding:12px 18px;border-radius:8px;display:flex;gap:28px;flex-wrap:wrap;border:1px solid #e8dfc8}'
+    +'.sum-item{font-size:12px;color:#666}.sum-val{font-weight:700;color:#c4a35a;font-size:16px;display:block}'
+    +'@media print{body{margin:8px}}'
+    +'</style></head><body>'
+    +'<div class="header">'
+    +'<div><div class="clinic">✦ Harmony Skin Tech</div><div class="clinic-sub">By Dra. Isabel Jiménez</div></div>'
+    +'<div style="text-align:right"><h1>Panorama Semanal</h1><div class="periodo">'+labelSemana+'</div></div>'
+    +'</div>'
+    + seccionesHTML
+    +'<div class="resumen">'
+    +'<div class="sum-item"><span class="sum-val">'+citasSemana+'</span>Citas en la semana</div>'
+    +'<div class="sum-item"><span class="sum-val">'+pendientesSemana+'</span>Pendientes</div>'
+    +(totalSemana>0?'<div class="sum-item"><span class="sum-val">$'+totalSemana.toLocaleString('es-CO')+'</span>Ingresos realizados</div>':'')
+    +'</div>'
+    +'<p style="margin-top:16px;font-size:10px;color:#ccc;text-align:right">Generado el '+new Date().toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'})+'</p>'
     +'</body></html>';
 
   var w = window.open('','_blank');
